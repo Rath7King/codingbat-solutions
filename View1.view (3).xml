@@ -1,0 +1,134 @@
+<mvc:View controllerName="project1.controller.View1"
+    xmlns:mvc="sap.ui.core.mvc"
+    xmlns="sap.m"
+    xmlns:l="sap.ui.layout"
+    xmlns:core="sap.ui.core"
+    xmlns:viz="sap.viz.ui5.controls"
+    xmlns:vizFrame="sap.viz.ui5.controls.VizFrame"
+    xmlns:vizData="sap.viz.ui5.data"
+    displayBlock="true">
+
+    <Page id="page" showHeader="false" backgroundDesign="Solid" class="mfuPage">
+        <content>
+            <!-- Header Bar -->
+            <Bar class="mfuHeader">
+                <contentLeft>
+                    <VBox class="mfuBrandBox">
+                        <Text text="Aspire" class="mfuBrandAspire"/>
+                        <HBox class="mfuBrandFinSightRow">
+                            <Text text="Fin" class="mfuBrandFinBlue"/>
+                            <Text text="Sight" class="mfuBrandSightGreen"/>
+                        </HBox>
+                        <Text text="MFU Dashboard" class="mfuDashboardSubtitle"/>
+                    </VBox>
+                </contentLeft>
+                <contentRight>
+                    <DatePicker id="datePicker" class="mfuDatePicker" value="Dec 25, 2025"/>
+                </contentRight>
+            </Bar>
+
+            <!-- KPI Cards Row -->
+            <l:HorizontalLayout class="mfuKpiRow" allowWrapping="true">
+                <!-- KPI 1: Total MFU Uploaded -->
+                <VBox class="mfuKpiCard">
+                    <Text text="Total MFU" class="mfuKpiLabel"/>
+                    <Text text="Uploaded" class="mfuKpiLabel"/>
+                    <Text text="71" class="mfuKpiValue"/>
+                    <Text text="MFU_COUNT" class="mfuKpiSubLabel"/>
+                </VBox>
+
+                <!-- KPI 2: Total MFU Approved -->
+                <VBox class="mfuKpiCard">
+                    <Text text="Total MFU" class="mfuKpiLabel"/>
+                    <Text text="Approved" class="mfuKpiLabel"/>
+                    <Text text="60" class="mfuKpiValueGreen"/>
+                    <Text text="MFU_COUNT" class="mfuKpiSubLabel"/>
+                </VBox>
+
+                <!-- KPI 3: MFU Template Onboarded -->
+                <VBox class="mfuKpiCard">
+                    <Text text="MFU Template" class="mfuKpiLabel"/>
+                    <Text text="Onboarded" class="mfuKpiLabel"/>
+                    <Text text="114" class="mfuKpiValue"/>
+                    <Text text="MFU_COUNT" class="mfuKpiSubLabel"/>
+                </VBox>
+
+                <!-- KPI 4: Total MFU Rejected -->
+                <VBox class="mfuKpiCard">
+                    <Text text="Total MFU" class="mfuKpiLabel"/>
+                    <Text text="Rejected" class="mfuKpiLabel"/>
+                    <Text text="18" class="mfuKpiValueRed"/>
+                    <Text text="MFU_COUNT" class="mfuKpiSubLabel"/>
+                </VBox>
+
+                <!-- Chart Panel -->
+                <VBox class="mfuChartCard">
+                    <Text text="MFU Templates by Modules" class="mfuChartTitle"/>
+                    <!-- Legend -->
+                    <HBox class="mfuLegend">
+                        <HBox class="mfuLegendItem">
+                            <core:Icon src="sap-icon://circle-task" class="legendIconApproved"/>
+                            <Text text="approved" class="legendText"/>
+                        </HBox>
+                        <HBox class="mfuLegendItem">
+                            <core:Icon src="sap-icon://circle-task" class="legendIconPending"/>
+                            <Text text="pending" class="legendText"/>
+                        </HBox>
+                        <HBox class="mfuLegendItem">
+                            <core:Icon src="sap-icon://circle-task" class="legendIconUploaded"/>
+                            <Text text="uploaded" class="legendText"/>
+                        </HBox>
+                    </HBox>
+                    <!-- Bar Chart Container -->
+                    <HBox id="chartContainer" class="mfuBarChartContainer" alignItems="FlexEnd">
+                        <!-- VNA -->
+                        <VBox class="mfuBarGroup">
+                            <VBox class="mfuStackedBar">
+                                <VBox class="mfuBarSegment mfuBarUploaded mfuH8"/>
+                                <VBox class="mfuBarSegment mfuBarPending mfuH20"/>
+                                <VBox class="mfuBarSegment mfuBarApproved mfuH110"/>
+                            </VBox>
+                            <Text text="VNA" class="mfuBarLabel"/>
+                        </VBox>
+                        <!-- FINCORE -->
+                        <VBox class="mfuBarGroup">
+                            <VBox class="mfuStackedBar">
+                                <VBox class="mfuBarSegment mfuBarUploaded mfuH4"/>
+                                <VBox class="mfuBarSegment mfuBarPending mfuH8"/>
+                                <VBox class="mfuBarSegment mfuBarApproved mfuH24"/>
+                            </VBox>
+                            <Text text="FINCORE" class="mfuBarLabel"/>
+                        </VBox>
+                        <!-- ICON -->
+                        <VBox class="mfuBarGroup">
+                            <VBox class="mfuStackedBar">
+                                <VBox class="mfuBarSegment mfuBarUploaded mfuH4"/>
+                                <VBox class="mfuBarSegment mfuBarPending mfuH8"/>
+                                <VBox class="mfuBarSegment mfuBarApproved mfuH32"/>
+                            </VBox>
+                            <Text text="ICON" class="mfuBarLabel"/>
+                        </VBox>
+                        <!-- ICRP -->
+                        <VBox class="mfuBarGroup">
+                            <VBox class="mfuStackedBar">
+                                <VBox class="mfuBarSegment mfuBarUploaded mfuH4"/>
+                                <VBox class="mfuBarSegment mfuBarPending mfuH8"/>
+                                <VBox class="mfuBarSegment mfuBarApproved mfuH88"/>
+                            </VBox>
+                            <Text text="ICRP" class="mfuBarLabel"/>
+                        </VBox>
+                        <!-- TREASURY -->
+                        <VBox class="mfuBarGroup">
+                            <VBox class="mfuStackedBar">
+                                <VBox class="mfuBarSegment mfuBarUploaded mfuH4"/>
+                                <VBox class="mfuBarSegment mfuBarPending mfuH6"/>
+                                <VBox class="mfuBarSegment mfuBarApproved mfuH20"/>
+                            </VBox>
+                            <Text text="TREASURY" class="mfuBarLabel"/>
+                        </VBox>
+                    </HBox>
+                </VBox>
+            </l:HorizontalLayout>
+        </content>
+    </Page>
+</mvc:View>
