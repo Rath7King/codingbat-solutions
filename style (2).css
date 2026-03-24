@@ -1,0 +1,249 @@
+/* ============================================================
+   Aspire FinSight – MFU Dashboard Styles
+   Only modifies View1 elements; App shell is untouched.
+   ============================================================ */
+
+/* ---------- Page ---------- */
+.mfuPage {
+    background-color: #f0f4f8 !important;
+    font-family: 'Segoe UI', Arial, sans-serif;
+}
+
+/* ---------- Header Bar ---------- */
+.mfuHeader {
+    background: #ffffff !important;
+    border-bottom: 3px solid #4caf7d !important;
+    height: 64px !important;
+    padding: 0 16px !important;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.08) !important;
+}
+
+.mfuBrandBox {
+    justify-content: center;
+}
+
+.mfuBrandAspire {
+    color: #5a8a6a !important;
+    font-size: 11px !important;
+    line-height: 1.1 !important;
+    font-weight: 500 !important;
+    letter-spacing: 1px !important;
+    text-transform: uppercase !important;
+}
+
+.mfuBrandFin {
+    color: #1a3a5c !important;
+    font-size: 18px !important;
+    font-weight: 700 !important;
+    line-height: 1.1 !important;
+    letter-spacing: 0.5px !important;
+}
+
+.mfuDashboardSubtitle {
+    color: #2d5a3d !important;
+    font-size: 13px !important;
+    font-weight: 600 !important;
+    margin-top: 2px !important;
+    letter-spacing: 0.2px !important;
+}
+
+.mfuDatePicker {
+    background: #f0f7f3 !important;
+    border: 1px solid #b2d8c0 !important;
+    border-radius: 4px !important;
+    color: #3a6b4e !important;
+    font-size: 12px !important;
+    height: 32px !important;
+    min-width: 140px !important;
+}
+
+/* ---------- KPI Row ---------- */
+.mfuKpiRow {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    padding: 16px !important;
+    gap: 12px !important;
+    align-items: stretch !important;
+}
+
+/* ---------- KPI Cards ---------- */
+.mfuKpiCard {
+    background: #ffffff !important;
+    border: 1px solid #d8e4ed !important;
+    border-left: 4px solid #1a6fa8 !important;
+    border-radius: 6px !important;
+    padding: 14px 18px !important;
+    min-width: 130px !important;
+    max-width: 160px !important;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.07) !important;
+    flex: 1 !important;
+}
+
+.mfuKpiLabel {
+    color: #4a6274 !important;
+    font-size: 12px !important;
+    font-weight: 600 !important;
+    line-height: 1.3 !important;
+    letter-spacing: 0.2px !important;
+}
+
+.mfuKpiValue {
+    color: #4caf7d !important;
+    font-size: 32px !important;
+    font-weight: 700 !important;
+    margin-top: 8px !important;
+    line-height: 1 !important;
+}
+
+.mfuKpiValueGreen {
+    color: #4caf7d !important;
+    font-size: 32px !important;
+    font-weight: 700 !important;
+    margin-top: 8px !important;
+    line-height: 1 !important;
+}
+
+.mfuKpiValueRed {
+    color: #4caf7d !important;
+    font-size: 32px !important;
+    font-weight: 700 !important;
+    margin-top: 8px !important;
+    line-height: 1 !important;
+}
+
+.mfuKpiSubLabel {
+    color: #8ba5b8 !important;
+    font-size: 10px !important;
+    letter-spacing: 0.8px !important;
+    text-transform: uppercase !important;
+    margin-top: 2px !important;
+}
+
+/* ---------- Chart Card ---------- */
+.mfuChartCard {
+    background: #ffffff !important;
+    border: 1px solid #d8e4ed !important;
+    border-radius: 6px !important;
+    padding: 16px 20px !important;
+    flex: 3 !important;
+    min-width: 320px !important;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.07) !important;
+}
+
+.mfuChartTitle {
+    color: #1a3a5c !important;
+    font-size: 13px !important;
+    font-weight: 700 !important;
+    margin-bottom: 8px !important;
+    letter-spacing: 0.2px !important;
+}
+
+/* ---------- Legend ---------- */
+.mfuLegend {
+    margin-bottom: 12px !important;
+    gap: 16px !important;
+}
+
+.mfuLegendItem {
+    align-items: center !important;
+    gap: 4px !important;
+}
+
+.legendText {
+    font-size: 11px !important;
+    color: #4a6274 !important;
+}
+
+.legendIconApproved {
+    color: #1a3a5c !important;
+    font-size: 10px !important;
+}
+
+.legendIconPending {
+    color: #00b4d8 !important;
+    font-size: 10px !important;
+}
+
+.legendIconUploaded {
+    color: #90e0ef !important;
+    font-size: 10px !important;
+}
+
+/* ---------- Bar Chart ---------- */
+.mfuBarChartContainer {
+    display: flex !important;
+    align-items: flex-end !important;
+    gap: 24px !important;
+    padding: 8px 8px 0 8px !important;
+    height: 180px !important;
+    border-bottom: 2px solid #d0dde8 !important;
+}
+
+.mfuBarGroup {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    flex: 1 !important;
+}
+
+.mfuStackedBar {
+    display: flex !important;
+    flex-direction: column-reverse !important;
+    align-items: center !important;
+    width: 32px !important;
+    border-radius: 3px 3px 0 0 !important;
+    overflow: hidden !important;
+}
+
+.mfuBarSegment {
+    width: 32px !important;
+    transition: all 0.3s ease !important;
+}
+
+.mfuBarApproved {
+    background-color: #1a3a5c !important;
+}
+
+.mfuBarPending {
+    background-color: #00b4d8 !important;
+}
+
+.mfuBarUploaded {
+    background-color: #90e0ef !important;
+}
+
+.mfuBarLabel {
+    color: #4a6274 !important;
+    font-size: 10px !important;
+    margin-top: 6px !important;
+    text-align: center !important;
+    font-weight: 600 !important;
+    letter-spacing: 0.3px !important;
+}
+
+/* ---------- Bar Height Classes (replaces inline style attributes) ---------- */
+.mfuH4   { height: 4px !important;   }
+.mfuH6   { height: 6px !important;   }
+.mfuH8   { height: 8px !important;   }
+.mfuH20  { height: 20px !important;  }
+.mfuH24  { height: 24px !important;  }
+.mfuH32  { height: 32px !important;  }
+.mfuH88  { height: 88px !important;  }
+.mfuH110 { height: 110px !important; }
+
+/* ---------- Responsive ---------- */
+@media (max-width: 768px) {
+    .mfuKpiCard {
+        min-width: 100px !important;
+        max-width: 140px !important;
+        padding: 10px 12px !important;
+    }
+    .mfuKpiValue,
+    .mfuKpiValueGreen,
+    .mfuKpiValueRed {
+        font-size: 24px !important;
+    }
+    .mfuChartCard {
+        min-width: 100% !important;
+    }
+}
