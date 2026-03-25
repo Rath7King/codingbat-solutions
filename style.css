@@ -1,0 +1,47 @@
+/* =====================================================
+   Aspire FinSight — MFU Dashboard
+   ===================================================== */
+
+/* ── Header ── */
+.aspireLabel .sapMText          { font-size: 0.72rem !important; color: #888 !important; text-transform: uppercase; letter-spacing: 0.05em; }
+.finSightTitle .sapMTitle       { color: #1565C0 !important; font-size: 1.4rem !important; font-weight: 700 !important; }
+.dashboardTitle .sapMTitle      { background: #8BC34A; color: #fff !important; font-size: 0.85rem !important; font-weight: 600 !important; padding: 2px 10px; border-radius: 3px; display: inline-block; }
+.dateText .sapMText             { font-size: 0.72rem !important; color: #777 !important; }
+
+/* ── KPI grid ── */
+.kpiGrid                        { min-width: 280px; max-width: 320px; flex-shrink: 0; }
+.kpiGrid .sapUiLayoutGrid > .sapUiLayoutGridC { padding: 4px !important; }
+
+.kpiCard                        { background: #fff; border: 1px solid #e0e0e0; border-radius: 8px; padding: 12px 14px !important; box-shadow: 0 1px 3px rgba(0,0,0,.06); height: 100%; }
+.kpiAccentBar                   { color: #1565C0 !important; font-size: 0.9rem !important; border-left: 3px solid #1565C0; padding-left: 5px; margin-right: 4px; }
+.kpiLabel .sapMText             { font-size: 0.75rem !important; color: #555 !important; line-height: 1.3 !important; }
+.kpiValue .sapMText             { font-size: 1.8rem !important; font-weight: 700 !important; color: #43A047 !important; line-height: 1.1 !important; margin-top: 6px !important; }
+.kpiSubLabel .sapMText          { font-size: 0.62rem !important; color: #aaa !important; letter-spacing: 0.05em; margin-top: 2px !important; }
+
+/* ── Chart panels ── */
+.chartPanel                     { border: 1px solid #e8e8e8 !important; border-radius: 10px !important; background: #fff !important; box-shadow: 0 1px 4px rgba(0,0,0,.05) !important; }
+.chartPanel > .sapMPanelHdr     { font-size: 0.8rem !important; font-weight: 600 !important; color: #333 !important; background: #fafafa !important; border-bottom: 1px solid #f0f0f0 !important; border-radius: 10px 10px 0 0 !important; padding: 8px 14px !important; }
+.modulePanel                    { flex: 1 1 0; min-width: 0; }
+
+/* ── Legend — dot rendered via CSS ::before, no extra Icon control needed ── */
+.legendItem .sapMText           { font-size: 0.7rem !important; color: #555 !important; padding-left: 14px; position: relative; margin-right: 10px; }
+.legendItem .sapMText::before   { content: ""; position: absolute; left: 0; top: 50%; transform: translateY(-50%); width: 9px; height: 9px; border-radius: 2px; }
+
+/* Legend dot colours — one line each */
+.legendApproved  .sapMText::before { background: #1f3d7a; }
+.legendPending   .sapMText::before { background: #4db8a4; }
+.legendUploaded  .sapMText::before { background: #7ec8a0; }
+.legendESG       .sapMText::before { background: #2196a8; }
+.legendFINCOST   .sapMText::before { background: #4db8a4; }
+.legendICON      .sapMText::before { background: #7ec8c8; }
+.legendNFRP      .sapMText::before { background: #1a5276; }
+.legendTREASURY  .sapMText::before { background: #34495e; }
+
+/* ── Details table ── */
+.mfuTable .sapMListTblHeaderCell { font-size: 0.7rem !important; font-weight: 700 !important; color: #555 !important; letter-spacing: 0.03em; background: #f5f5f5 !important; }
+.mfuTable .sapMLIB               { border-bottom: 1px solid #f5f5f5 !important; }
+.mfuTable .sapMText              { font-size: 0.78rem !important; color: #333 !important; }
+.loadCount .sapMText             { color: #1565C0 !important; font-weight: 500 !important; }
+
+/* ── Page background ── */
+.sapMPage > .sapMPageBG         { background-color: #f0f2f5 !important; }

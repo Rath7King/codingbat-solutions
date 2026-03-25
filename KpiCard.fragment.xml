@@ -1,0 +1,25 @@
+<core:FragmentDefinition
+    xmlns="sap.m"
+    xmlns:core="sap.ui.core">
+
+    <!--
+        Renders all 4 KPI cards from the /kpiCards model array.
+        Each card: { label: "Total MFU\nUploaded", value: "71" }
+        The label uses "\n" which is split in the controller into two Text lines.
+        Add more cards simply by pushing to /kpiCards — no XML changes needed.
+    -->
+    <core:Repeat list="{/kpiCards}" var="card">
+        <VBox class="kpiCard">
+            <HBox>
+                <core:Icon src="sap-icon://bar-chart" class="kpiAccentBar"/>
+                <VBox class="sapUiTinyMarginBegin">
+                    <Text text="{card>line1}" class="kpiLabel"/>
+                    <Text text="{card>line2}" class="kpiLabel"/>
+                </VBox>
+            </HBox>
+            <Text text="{card>value}"   class="kpiValue"/>
+            <Text text="MFU COUNT"      class="kpiSubLabel"/>
+        </VBox>
+    </core:Repeat>
+
+</core:FragmentDefinition>

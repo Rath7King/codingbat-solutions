@@ -1,0 +1,204 @@
+<mvc:View controllerName="project1.controller.View1"
+    xmlns:mvc="sap.ui.core.mvc"
+    xmlns="sap.m"
+    xmlns:l="sap.ui.layout"
+    xmlns:core="sap.ui.core"
+    xmlns:viz="sap.viz.ui5.controls"
+    xmlns:vizData="sap.viz.ui5.data">
+
+    <Page id="page" showHeader="false" class="sapUiContentPadding">
+        <content>
+            <VBox class="sapUiSmallMargin">
+
+                <!-- HEADER -->
+                <HBox alignItems="Center" justifyContent="SpaceBetween" class="sapUiSmallMarginBottom">
+                    <VBox>
+                        <Text text="Aspire" class="aspireLabel"/>
+                        <Title text="FinSight" level="H2" class="finSightTitle"/>
+                        <Title text="MFU Dashboard" level="H3" class="dashboardTitle"/>
+                    </VBox>
+                    <HBox alignItems="Center">
+                        <core:Icon src="sap-icon://calendar" class="sapUiTinyMarginEnd"/>
+                        <Text text="CREATEDDAY: Dec 28, 2025 5:00..." class="dateText"/>
+                    </HBox>
+                </HBox>
+
+                <!-- ROW 1: 2×2 KPI grid (left) + Modules stacked bar (right) -->
+                <HBox alignItems="Stretch" class="sapUiSmallMarginBottom">
+
+                    <!-- KPI cards rendered from model binding -->
+                    <l:Grid defaultSpan="XL6 L6 M6 S6"
+                            class="kpiGrid sapUiSmallMarginEnd"
+                            containerQuery="true">
+                        <core:Fragment fragmentName="project1.view.KpiCard" type="XML"/>
+                    </l:Grid>
+
+                    <!-- Modules stacked bar -->
+                    <Panel headerText="MFU Templates by Modules" class="chartPanel modulePanel" expandable="false">
+                        <content>
+                            <!-- Legend rendered via CSS classes only — no nested HBox per item -->
+                            <HBox class="legendRow sapUiTinyMargin">
+                                <Text text="approved" class="legendItem legendApproved"/>
+                                <Text text="pending"  class="legendItem legendPending"/>
+                                <Text text="uploaded" class="legendItem legendUploaded"/>
+                            </HBox>
+                            <viz:VizFrame id="moduleBarChart" vizType="stacked_bar"
+                                uiConfig="{applicationSet:'fiori'}" height="200px" width="100%">
+                                <viz:dataset>
+                                    <vizData:FlattenedDataset data="{/moduleData}">
+                                        <vizData:dimensions>
+                                            <vizData:DimensionDefinition name="Module" value="{module}"/>
+                                        </vizData:dimensions>
+                                        <vizData:measures>
+                                            <vizData:MeasureDefinition name="Approved" value="{approved}"/>
+                                            <vizData:MeasureDefinition name="Pending"  value="{pending}"/>
+                                            <vizData:MeasureDefinition name="Uploaded" value="{uploaded}"/>
+                                        </vizData:measures>
+                                    </vizData:FlattenedDataset>
+                                </viz:dataset>
+                                <viz:feeds>
+                                    <viz:FeedItem uid="valueAxis"    type="Measure"   values="['Approved','Pending','Uploaded']"/>
+                                    <viz:FeedItem uid="categoryAxis" type="Dimension" values="['Module']"/>
+                                </viz:feeds>
+                            </viz:VizFrame>
+                        </content>
+                    </Panel>
+                </HBox>
+
+                <!-- ROW 2: 4-column grid — Donut | Month | Quarter | Year -->
+                <l:Grid defaultSpan="XL3 L3 M3 S12"
+                        class="sapUiSmallMarginBottom"
+                        containerQuery="true">
+
+                    <!-- Donut: by Count -->
+                    <Panel headerText="MFU Templates by Count" class="chartPanel" expandable="false">
+                        <content>
+                            <!-- Compact legend: dot rendered purely via CSS ::before -->
+                            <HBox class="legendRow sapUiTinyMargin" wrap="Wrap">
+                                <Text text="ESG"      class="legendItem legendESG"/>
+                                <Text text="FINCOST"  class="legendItem legendFINCOST"/>
+                                <Text text="ICON"     class="legendItem legendICON"/>
+                                <Text text="NFRP"     class="legendItem legendNFRP"/>
+                                <Text text="TREASURY" class="legendItem legendTREASURY"/>
+                            </HBox>
+                            <viz:VizFrame id="pieChart" vizType="donut"
+                                uiConfig="{applicationSet:'fiori'}" height="200px" width="100%">
+                                <viz:dataset>
+                                    <vizData:FlattenedDataset data="{/pieData}">
+                                        <vizData:dimensions>
+                                            <vizData:DimensionDefinition name="Module" value="{module}"/>
+                                        </vizData:dimensions>
+                                        <vizData:measures>
+                                            <vizData:MeasureDefinition name="Count" value="{count}"/>
+                                        </vizData:measures>
+                                    </vizData:FlattenedDataset>
+                                </viz:dataset>
+                                <viz:feeds>
+                                    <viz:FeedItem uid="size"  type="Measure"   values="['Count']"/>
+                                    <viz:FeedItem uid="color" type="Dimension" values="['Module']"/>
+                                </viz:feeds>
+                            </viz:VizFrame>
+                        </content>
+                    </Panel>
+
+                    <!-- Bar: Top 3 by Month -->
+                    <Panel headerText="Top 3 MFU Templates by Usage (by Month)" class="chartPanel" expandable="false">
+                        <content>
+                            <viz:VizFrame id="monthChart" vizType="bar"
+                                uiConfig="{applicationSet:'fiori'}" height="200px" width="100%">
+                                <viz:dataset>
+                                    <vizData:FlattenedDataset data="{/topMonthData}">
+                                        <vizData:dimensions>
+                                            <vizData:DimensionDefinition name="Template" value="{template}"/>
+                                        </vizData:dimensions>
+                                        <vizData:measures>
+                                            <vizData:MeasureDefinition name="Usage" value="{usage}"/>
+                                        </vizData:measures>
+                                    </vizData:FlattenedDataset>
+                                </viz:dataset>
+                                <viz:feeds>
+                                    <viz:FeedItem uid="valueAxis"    type="Measure"   values="['Usage']"/>
+                                    <viz:FeedItem uid="categoryAxis" type="Dimension" values="['Template']"/>
+                                </viz:feeds>
+                            </viz:VizFrame>
+                        </content>
+                    </Panel>
+
+                    <!-- Bar: Top 3 by Quarter -->
+                    <Panel headerText="Top 3 MFU Templates by Usage (by Quarter)" class="chartPanel" expandable="false">
+                        <content>
+                            <viz:VizFrame id="quarterChart" vizType="bar"
+                                uiConfig="{applicationSet:'fiori'}" height="200px" width="100%">
+                                <viz:dataset>
+                                    <vizData:FlattenedDataset data="{/topQuarterData}">
+                                        <vizData:dimensions>
+                                            <vizData:DimensionDefinition name="Template" value="{template}"/>
+                                        </vizData:dimensions>
+                                        <vizData:measures>
+                                            <vizData:MeasureDefinition name="Usage" value="{usage}"/>
+                                        </vizData:measures>
+                                    </vizData:FlattenedDataset>
+                                </viz:dataset>
+                                <viz:feeds>
+                                    <viz:FeedItem uid="valueAxis"    type="Measure"   values="['Usage']"/>
+                                    <viz:FeedItem uid="categoryAxis" type="Dimension" values="['Template']"/>
+                                </viz:feeds>
+                            </viz:VizFrame>
+                        </content>
+                    </Panel>
+
+                    <!-- Bar: Top 3 by Year -->
+                    <Panel headerText="Top 3 MFU Templates by Usage (by Year)" class="chartPanel" expandable="false">
+                        <content>
+                            <viz:VizFrame id="yearChart" vizType="bar"
+                                uiConfig="{applicationSet:'fiori'}" height="200px" width="100%">
+                                <viz:dataset>
+                                    <vizData:FlattenedDataset data="{/topYearData}">
+                                        <vizData:dimensions>
+                                            <vizData:DimensionDefinition name="Template" value="{template}"/>
+                                        </vizData:dimensions>
+                                        <vizData:measures>
+                                            <vizData:MeasureDefinition name="Usage" value="{usage}"/>
+                                        </vizData:measures>
+                                    </vizData:FlattenedDataset>
+                                </viz:dataset>
+                                <viz:feeds>
+                                    <viz:FeedItem uid="valueAxis"    type="Measure"   values="['Usage']"/>
+                                    <viz:FeedItem uid="categoryAxis" type="Dimension" values="['Template']"/>
+                                </viz:feeds>
+                            </viz:VizFrame>
+                        </content>
+                    </Panel>
+
+                </l:Grid>
+
+                <!-- MFU Details Table -->
+                <Panel headerText="MFU Details" class="chartPanel" expandable="false">
+                    <content>
+                        <Table id="mfuTable" items="{/tableData}" class="mfuTable">
+                            <columns>
+                                <Column><Text text="MODULE NAME"/></Column>
+                                <Column><Text text="SUB MODULE NAME"/></Column>
+                                <Column><Text text="LOAD TYPE"/></Column>
+                                <Column><Text text="LOAD TEMPLATE"/></Column>
+                                <Column hAlign="End"><Text text="LOAD COUNT"/></Column>
+                            </columns>
+                            <items>
+                                <ColumnListItem>
+                                    <cells>
+                                        <Text text="{moduleName}"/>
+                                        <Text text="{subModuleName}"/>
+                                        <Text text="{loadType}"/>
+                                        <Text text="{loadTemplate}"/>
+                                        <Text text="{loadCount}" class="loadCount"/>
+                                    </cells>
+                                </ColumnListItem>
+                            </items>
+                        </Table>
+                    </content>
+                </Panel>
+
+            </VBox>
+        </content>
+    </Page>
+</mvc:View>
