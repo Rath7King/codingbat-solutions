@@ -45,7 +45,7 @@ sap.ui.define([
                 }
             });
 
-            // Donut — show percentage labels near each slice
+            // Donut — percentage labels near each slice
             this._setViz("pieChart", {
                 legend: { visible: false },
                 title:  { visible: false },
