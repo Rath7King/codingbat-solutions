@@ -170,11 +170,11 @@
 
                             <VBox class="usageChartCell usageChartCellRight">
                                 <Panel class="chartPanel usagePanel" expandable="false">
-                                    <Panel.headerToolbar>
+                                    <headerToolbar>
                                         <Toolbar class="usagePanelToolbar">
                                             <Title text="Top 3 MFU Templates by Usage (by Month)" class="usagePanelTitle" wrapping="true"/>
                                         </Toolbar>
-                                    </Panel.headerToolbar>
+                                    </headerToolbar>
                                     <content>
                                         <viz:VizFrame id="monthChart"
                                             uiConfig="{applicationSet:'fiori'}"
@@ -201,11 +201,11 @@
 
                             <VBox class="usageChartCell usageChartCellRight">
                                 <Panel class="chartPanel usagePanel" expandable="false">
-                                    <Panel.headerToolbar>
+                                    <headerToolbar>
                                         <Toolbar class="usagePanelToolbar">
                                             <Title text="Top 3 MFU Templates by Usage (by Quarter)" class="usagePanelTitle" wrapping="true"/>
                                         </Toolbar>
-                                    </Panel.headerToolbar>
+                                    </headerToolbar>
                                     <content>
                                         <viz:VizFrame id="quarterChart"
                                             uiConfig="{applicationSet:'fiori'}"
@@ -232,11 +232,11 @@
 
                             <VBox class="usageChartCell">
                                 <Panel class="chartPanel usagePanel" expandable="false">
-                                    <Panel.headerToolbar>
+                                    <headerToolbar>
                                         <Toolbar class="usagePanelToolbar">
                                             <Title text="Top 3 MFU Templates by Usage (by Year)" class="usagePanelTitle" wrapping="true"/>
                                         </Toolbar>
-                                    </Panel.headerToolbar>
+                                    </headerToolbar>
                                     <content>
                                         <viz:VizFrame id="yearChart"
                                             uiConfig="{applicationSet:'fiori'}"
