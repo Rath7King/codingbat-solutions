@@ -4,7 +4,8 @@
     xmlns:l="sap.ui.layout"
     xmlns:core="sap.ui.core"
     xmlns:viz="sap.viz.ui5.controls"
-    xmlns:vizData="sap.viz.ui5.data">
+    xmlns:vizData="sap.viz.ui5.data"
+    xmlns:vizFeeds="sap.viz.ui5.controls.common.feeds">
 
     <Page showHeader="false" class="sapUiContentPadding">
         <content>
@@ -90,6 +91,7 @@
                                             <Text text="uploaded" class="legendText sapUiTinyMarginBegin"/>
                                         </HBox>
                                     </HBox>
+
                                     <viz:VizFrame id="moduleBarChart"
                                         uiConfig="{applicationSet:'fiori'}"
                                         height="240px"
@@ -98,7 +100,9 @@
                                         <viz:dataset>
                                             <vizData:FlattenedDataset data="{/moduleData}">
                                                 <vizData:dimensions>
-                                                    <vizData:DimensionDefinition name="Module" value="{module}"/>
+                                                    <vizData:DimensionDefinition
+                                                        name="Module"
+                                                        value="{module}"/>
                                                 </vizData:dimensions>
                                                 <vizData:measures>
                                                     <vizData:MeasureDefinition name="Approved" value="{approved}"/>
@@ -107,7 +111,12 @@
                                                 </vizData:measures>
                                             </vizData:FlattenedDataset>
                                         </viz:dataset>
+                                        <viz:feeds>
+                                            <vizFeeds:FeedItem uid="valueAxis"    type="Measure"   values="Approved,Pending,Uploaded"/>
+                                            <vizFeeds:FeedItem uid="categoryAxis" type="Dimension" values="Module"/>
+                                        </viz:feeds>
                                     </viz:VizFrame>
+
                                 </content>
                             </Panel>
                         </VBox>
@@ -159,6 +168,10 @@
                                             </vizData:measures>
                                         </vizData:FlattenedDataset>
                                     </viz:dataset>
+                                    <viz:feeds>
+                                        <vizFeeds:FeedItem uid="size"  type="Measure"   values="Count"/>
+                                        <vizFeeds:FeedItem uid="color" type="Dimension" values="Module"/>
+                                    </viz:feeds>
                                 </viz:VizFrame>
                             </content>
                         </Panel>
@@ -181,6 +194,10 @@
                                             </vizData:measures>
                                         </vizData:FlattenedDataset>
                                     </viz:dataset>
+                                    <viz:feeds>
+                                        <vizFeeds:FeedItem uid="valueAxis"    type="Measure"   values="Usage"/>
+                                        <vizFeeds:FeedItem uid="categoryAxis" type="Dimension" values="Template"/>
+                                    </viz:feeds>
                                 </viz:VizFrame>
                             </content>
                         </Panel>
@@ -203,6 +220,10 @@
                                             </vizData:measures>
                                         </vizData:FlattenedDataset>
                                     </viz:dataset>
+                                    <viz:feeds>
+                                        <vizFeeds:FeedItem uid="valueAxis"    type="Measure"   values="Usage"/>
+                                        <vizFeeds:FeedItem uid="categoryAxis" type="Dimension" values="Template"/>
+                                    </viz:feeds>
                                 </viz:VizFrame>
                             </content>
                         </Panel>
@@ -225,6 +246,10 @@
                                             </vizData:measures>
                                         </vizData:FlattenedDataset>
                                     </viz:dataset>
+                                    <viz:feeds>
+                                        <vizFeeds:FeedItem uid="valueAxis"    type="Measure"   values="Usage"/>
+                                        <vizFeeds:FeedItem uid="categoryAxis" type="Dimension" values="Template"/>
+                                    </viz:feeds>
                                 </viz:VizFrame>
                             </content>
                         </Panel>

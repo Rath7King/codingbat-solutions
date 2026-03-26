@@ -1,10 +1,7 @@
 sap.ui.define([
     "sap/ui/core/mvc/Controller",
-    "sap/ui/model/json/JSONModel",
-    "sap/viz/ui5/controls/VizFrame",
-    "sap/viz/ui5/controls/common/feeds/FeedItem",
-    "sap/viz/ui5/data/FlattenedDataset"
-], function(Controller, JSONModel, VizFrame, FeedItem, FlattenedDataset) {
+    "sap/ui/model/json/JSONModel"
+], function(Controller, JSONModel) {
     "use strict";
 
     return Controller.extend("project1.controller.View1", {
@@ -17,6 +14,7 @@ sap.ui.define([
             this._configureCharts();
         },
 
+        // ── Model ────────────────────────────────────────────────
         _initModel: function() {
             var oModel = new JSONModel({
                 createdDate: "CREATEDDAY: Dec 28, 2025 0:0...",
@@ -68,6 +66,7 @@ sap.ui.define([
             this.getView().setModel(oModel);
         },
 
+        // ── Chart viz-properties only (feeds are declared in the view XML) ──
         _configureCharts: function() {
             this._setupModuleStackedChart();
             this._setupPieChart();
@@ -76,25 +75,19 @@ sap.ui.define([
             this._setupColumnChart("yearChart",    ["#4db8a4", "#2196a8", "#1f6b3a"]);
         },
 
-        /* ── Module chart: stacked_column ── */
+        // Stacked column — Approved / Pending / Uploaded per module
         _setupModuleStackedChart: function() {
             var oChart = this.byId("moduleBarChart");
-            if (!oChart) {
-                console.warn("moduleBarChart not found");
-                return;
-            }
-            oChart.destroyFeeds();
-            oChart.setVizType("stacked_column");
-            oChart.setWidth("100%");
+            if (!oChart) { return; }
 
             oChart.setVizProperties({
-                legend: { visible: false },
+                legend:       { visible: false },
                 categoryAxis: {
                     title: { visible: false },
                     label: { truncatedLabelRatio: 0.15 }
                 },
                 valueAxis: { title: { visible: false } },
-                title: { visible: false },
+                title:     { visible: false },
                 plotArea: {
                     colorPalette: ["#1f3d7a", "#4db8a4", "#7ec8a0"],
                     dataLabel: {
@@ -104,43 +97,27 @@ sap.ui.define([
                     }
                 }
             });
-
-            oChart.addFeed(new FeedItem({ uid: "valueAxis",    type: "Measure",   values: ["Approved", "Pending", "Uploaded"] }));
-            oChart.addFeed(new FeedItem({ uid: "categoryAxis", type: "Dimension", values: ["Module"] }));
         },
 
-        /* ── Donut chart ── */
+        // Donut — MFU Templates by Count
         _setupPieChart: function() {
             var oChart = this.byId("pieChart");
-            if (!oChart) {
-                console.warn("pieChart not found");
-                return;
-            }
-            oChart.destroyFeeds();
+            if (!oChart) { return; }
 
             oChart.setVizProperties({
-                legend:   { visible: false },
-                title:    { visible: false },
+                legend: { visible: false },
+                title:  { visible: false },
                 plotArea: {
                     colorPalette: ["#2196a8", "#4db8a4", "#7ec8c8", "#1a5276", "#34495e"],
                     dataLabel: { visible: true, type: "percentage" }
                 }
             });
-
-            oChart.addFeed(new FeedItem({ uid: "size",  type: "Measure",   values: ["Count"] }));
-            oChart.addFeed(new FeedItem({ uid: "color", type: "Dimension", values: ["Module"] }));
         },
 
-        /* ── Generic column chart (Month / Quarter / Year) ── */
+        // Column — Top 3 usage charts (Month / Quarter / Year)
         _setupColumnChart: function(sId, aColors) {
             var oChart = this.byId(sId);
-            if (!oChart) {
-                console.warn(sId + " not found");
-                return;
-            }
-            oChart.destroyFeeds();
-            oChart.setVizType("column");
-            oChart.setWidth("100%");
+            if (!oChart) { return; }
 
             oChart.setVizProperties({
                 legend:       { visible: false },
@@ -152,9 +129,6 @@ sap.ui.define([
                     dataLabel: { visible: true }
                 }
             });
-
-            oChart.addFeed(new FeedItem({ uid: "valueAxis",    type: "Measure",   values: ["Usage"] }));
-            oChart.addFeed(new FeedItem({ uid: "categoryAxis", type: "Dimension", values: ["Template"] }));
         }
 
     });
