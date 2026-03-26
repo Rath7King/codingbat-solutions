@@ -35,10 +35,9 @@
                 <VBox class="sapUiSmallMargin">
 
                     <!-- ══ ROW 1: KPI (40%) + Module Chart (60%) ══ -->
-                    <!-- Use an HBox with explicit width classes on each child -->
                     <HBox class="row1Wrap sapUiSmallMarginBottom" alignItems="Stretch">
 
-                        <!-- LEFT CELL: 2x2 KPI cards — 40% -->
+                        <!-- LEFT: 2x2 KPI cards — 40% -->
                         <VBox class="kpiHalf">
                             <l:Grid defaultSpan="XL6 L6 M6 S6"
                                     class="kpiGrid"
@@ -72,7 +71,7 @@
                             </l:Grid>
                         </VBox>
 
-                        <!-- RIGHT CELL: MFU Templates by Modules stacked bar — 60% -->
+                        <!-- RIGHT: MFU Templates by Modules stacked bar — 60% -->
                         <VBox class="moduleHalf">
                             <Panel headerText="MFU Templates by Modules"
                                    class="modulePanel" expandable="false">
@@ -115,13 +114,12 @@
 
                     </HBox>
 
-                    <!-- ── ROW 2: Donut + 3 Column Charts ── -->
-                    <l:Grid defaultSpan="XL3 L3 M6 S12"
-                            class="sapUiSmallMarginBottom"
-                            containerQuery="true">
+                    <!-- ══ ROW 2: Donut (40%) + 3 Usage Charts (each ~20%) ══ -->
+                    <HBox class="row2Wrap sapUiSmallMarginBottom" alignItems="Stretch">
 
+                        <!-- Donut: same width as KPI block above = 40% -->
                         <Panel headerText="MFU Templates by Count"
-                               class="chartPanel" expandable="false">
+                               class="donutPanel" expandable="false">
                             <content>
                                 <HBox class="sapUiTinyMargin" wrap="Wrap">
                                     <HBox alignItems="Center" class="sapUiTinyMarginEnd">
@@ -163,8 +161,9 @@
                             </content>
                         </Panel>
 
+                        <!-- Top 3 by Month — each flex:1 within remaining 60% -->
                         <Panel headerText="Top 3 MFU Templates by Usage (by Month)"
-                               class="chartPanel" expandable="false">
+                               class="usagePanel" expandable="false">
                             <content>
                                 <viz:VizFrame id="monthChart"
                                     uiConfig="{applicationSet:'fiori'}"
@@ -184,8 +183,9 @@
                             </content>
                         </Panel>
 
+                        <!-- Top 3 by Quarter -->
                         <Panel headerText="Top 3 MFU Templates by Usage (by Quarter)"
-                               class="chartPanel" expandable="false">
+                               class="usagePanel" expandable="false">
                             <content>
                                 <viz:VizFrame id="quarterChart"
                                     uiConfig="{applicationSet:'fiori'}"
@@ -205,8 +205,9 @@
                             </content>
                         </Panel>
 
+                        <!-- Top 3 by Year -->
                         <Panel headerText="Top 3 MFU Templates by Usage (by Year)"
-                               class="chartPanel" expandable="false">
+                               class="usagePanel" expandable="false">
                             <content>
                                 <viz:VizFrame id="yearChart"
                                     uiConfig="{applicationSet:'fiori'}"
@@ -226,7 +227,7 @@
                             </content>
                         </Panel>
 
-                    </l:Grid>
+                    </HBox>
 
                     <!-- ── MFU Details Table ── -->
                     <Panel headerText="MFU Details" class="chartPanel" expandable="false">
