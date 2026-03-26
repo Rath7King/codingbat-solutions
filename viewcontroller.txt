@@ -14,7 +14,7 @@ sap.ui.define([
             this._configureCharts();
         },
 
-        // ── Model ────────────────────────────────────────────────
+        // ── Data Model ───────────────────────────────────────────
         _initModel: function() {
             var oModel = new JSONModel({
                 createdDate: "CREATEDDAY: Dec 28, 2025 0:0...",
@@ -66,7 +66,7 @@ sap.ui.define([
             this.getView().setModel(oModel);
         },
 
-        // ── Chart viz-properties only (feeds are declared in the view XML) ──
+        // ── Chart viz-properties (feeds declared in view XML) ────
         _configureCharts: function() {
             this._setupModuleStackedChart();
             this._setupPieChart();
@@ -79,7 +79,6 @@ sap.ui.define([
         _setupModuleStackedChart: function() {
             var oChart = this.byId("moduleBarChart");
             if (!oChart) { return; }
-
             oChart.setVizProperties({
                 legend:       { visible: false },
                 categoryAxis: {
@@ -103,7 +102,6 @@ sap.ui.define([
         _setupPieChart: function() {
             var oChart = this.byId("pieChart");
             if (!oChart) { return; }
-
             oChart.setVizProperties({
                 legend: { visible: false },
                 title:  { visible: false },
@@ -114,11 +112,10 @@ sap.ui.define([
             });
         },
 
-        // Column — Top 3 usage charts (Month / Quarter / Year)
+        // Column — Top 3 usage charts
         _setupColumnChart: function(sId, aColors) {
             var oChart = this.byId(sId);
             if (!oChart) { return; }
-
             oChart.setVizProperties({
                 legend:       { visible: false },
                 categoryAxis: { title: { visible: false } },

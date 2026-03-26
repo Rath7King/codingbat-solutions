@@ -33,51 +33,45 @@
                 </HBox>
 
                 <!-- ── MAIN CONTENT ── -->
-                <VBox class="sapUiSmallMargin">
+                <VBox class="mainContent">
 
-                    <!-- ══ ROW 1: KPI (40%) + Module Stacked Chart (60%) ══ -->
-                    <HBox class="row1Wrap sapUiSmallMarginBottom" alignItems="Stretch">
+                    <!-- ══ ROW 1: KPI 40% | Module Stacked Chart 60% ══ -->
+                    <HBox class="row1Wrap" alignItems="Stretch">
 
-                        <!-- LEFT: KPI 40% -->
-                        <VBox class="kpiHalf">
-                            <l:Grid defaultSpan="XL6 L6 M6 S6"
-                                    class="kpiGrid"
-                                    containerQuery="true"
-                                    width="100%">
-
+                        <!-- KPI 40% — 2×2 grid -->
+                        <VBox class="kpiSection">
+                            <HBox class="kpiRow">
                                 <VBox class="kpiCard">
                                     <Text text="Total MFU Uploaded" class="kpiLabel"/>
                                     <Text text="{/kpi/uploaded}" class="kpiValue"/>
                                     <Text text="MFU COUNT" class="kpiSubLabel"/>
                                 </VBox>
-
                                 <VBox class="kpiCard">
                                     <Text text="Total MFU Approved" class="kpiLabel"/>
                                     <Text text="{/kpi/approved}" class="kpiValue"/>
                                     <Text text="MFU COUNT" class="kpiSubLabel"/>
                                 </VBox>
-
+                            </HBox>
+                            <HBox class="kpiRow">
                                 <VBox class="kpiCard">
                                     <Text text="MFU Template Onboarded" class="kpiLabel"/>
                                     <Text text="{/kpi/onboarded}" class="kpiValue"/>
                                     <Text text="MFU COUNT" class="kpiSubLabel"/>
                                 </VBox>
-
                                 <VBox class="kpiCard">
                                     <Text text="Total MFU Rejected" class="kpiLabel"/>
                                     <Text text="{/kpi/rejected}" class="kpiValue"/>
                                     <Text text="MFU COUNT" class="kpiSubLabel"/>
                                 </VBox>
-
-                            </l:Grid>
+                            </HBox>
                         </VBox>
 
-                        <!-- RIGHT: Module Stacked Chart 60% -->
-                        <VBox class="moduleHalf">
+                        <!-- Module Stacked Chart 60% -->
+                        <VBox class="moduleSection">
                             <Panel headerText="MFU Templates by Modules"
                                    class="modulePanel" expandable="false">
                                 <content>
-                                    <HBox class="sapUiTinyMargin" justifyContent="End">
+                                    <HBox justifyContent="End" class="legendBar">
                                         <HBox alignItems="Center" class="sapUiTinyMarginEnd">
                                             <core:Icon src="sap-icon://circle-task-2" class="legendIconApproved"/>
                                             <Text text="approved" class="legendText sapUiTinyMarginBegin"/>
@@ -91,18 +85,15 @@
                                             <Text text="uploaded" class="legendText sapUiTinyMarginBegin"/>
                                         </HBox>
                                     </HBox>
-
                                     <viz:VizFrame id="moduleBarChart"
                                         uiConfig="{applicationSet:'fiori'}"
-                                        height="240px"
+                                        height="260px"
                                         width="100%"
                                         vizType="stacked_column">
                                         <viz:dataset>
                                             <vizData:FlattenedDataset data="{/moduleData}">
                                                 <vizData:dimensions>
-                                                    <vizData:DimensionDefinition
-                                                        name="Module"
-                                                        value="{module}"/>
+                                                    <vizData:DimensionDefinition name="Module" value="{module}"/>
                                                 </vizData:dimensions>
                                                 <vizData:measures>
                                                     <vizData:MeasureDefinition name="Approved" value="{approved}"/>
@@ -116,148 +107,156 @@
                                             <vizFeeds:FeedItem uid="categoryAxis" type="Dimension" values="Module"/>
                                         </viz:feeds>
                                     </viz:VizFrame>
-
                                 </content>
                             </Panel>
                         </VBox>
 
                     </HBox>
 
-                    <!-- ── ROW 2: Donut + 3 Column Charts (equal 25% each) ── -->
-                    <l:Grid defaultSpan="XL3 L3 M6 S12"
-                            class="sapUiSmallMarginBottom"
-                            containerQuery="true">
+                    <!-- ══ ROW 2: Donut (40%) | 3 Usage Charts (each ~20%) ══ -->
+                    <HBox class="row2Wrap" alignItems="Stretch">
 
-                        <!-- Donut -->
-                        <Panel headerText="MFU Templates by Count"
-                               class="chartPanel" expandable="false">
-                            <content>
-                                <HBox class="sapUiTinyMargin" wrap="Wrap">
-                                    <HBox alignItems="Center" class="sapUiTinyMarginEnd">
-                                        <core:Icon src="sap-icon://circle-task-2" class="legendESG"/>
-                                        <Text text="ESG" class="legendText sapUiTinyMarginBegin"/>
+                        <!-- Donut — same width as KPI section (40%) -->
+                        <VBox class="donutSection">
+                            <Panel headerText="MFU Templates by Count"
+                                   class="chartPanel" expandable="false">
+                                <content>
+                                    <HBox class="pieLegendBar" wrap="Wrap">
+                                        <HBox alignItems="Center" class="sapUiTinyMarginEnd">
+                                            <core:Icon src="sap-icon://circle-task-2" class="legendESG"/>
+                                            <Text text="ESG" class="legendText sapUiTinyMarginBegin"/>
+                                        </HBox>
+                                        <HBox alignItems="Center" class="sapUiTinyMarginEnd">
+                                            <core:Icon src="sap-icon://circle-task-2" class="legendFINCOST"/>
+                                            <Text text="FINCOST" class="legendText sapUiTinyMarginBegin"/>
+                                        </HBox>
+                                        <HBox alignItems="Center" class="sapUiTinyMarginEnd">
+                                            <core:Icon src="sap-icon://circle-task-2" class="legendICON"/>
+                                            <Text text="ICON" class="legendText sapUiTinyMarginBegin"/>
+                                        </HBox>
+                                        <HBox alignItems="Center" class="sapUiTinyMarginEnd">
+                                            <core:Icon src="sap-icon://circle-task-2" class="legendNFRP"/>
+                                            <Text text="NFRP" class="legendText sapUiTinyMarginBegin"/>
+                                        </HBox>
+                                        <HBox alignItems="Center">
+                                            <core:Icon src="sap-icon://circle-task-2" class="legendTREASURY"/>
+                                            <Text text="TREASURY" class="legendText sapUiTinyMarginBegin"/>
+                                        </HBox>
                                     </HBox>
-                                    <HBox alignItems="Center" class="sapUiTinyMarginEnd">
-                                        <core:Icon src="sap-icon://circle-task-2" class="legendFINCOST"/>
-                                        <Text text="FINCOST" class="legendText sapUiTinyMarginBegin"/>
-                                    </HBox>
-                                    <HBox alignItems="Center" class="sapUiTinyMarginEnd">
-                                        <core:Icon src="sap-icon://circle-task-2" class="legendICON"/>
-                                        <Text text="ICON" class="legendText sapUiTinyMarginBegin"/>
-                                    </HBox>
-                                    <HBox alignItems="Center" class="sapUiTinyMarginEnd">
-                                        <core:Icon src="sap-icon://circle-task-2" class="legendNFRP"/>
-                                        <Text text="NFRP" class="legendText sapUiTinyMarginBegin"/>
-                                    </HBox>
-                                    <HBox alignItems="Center">
-                                        <core:Icon src="sap-icon://circle-task-2" class="legendTREASURY"/>
-                                        <Text text="TREASURY" class="legendText sapUiTinyMarginBegin"/>
-                                    </HBox>
-                                </HBox>
-                                <viz:VizFrame id="pieChart"
-                                    uiConfig="{applicationSet:'fiori'}"
-                                    height="180px" width="100%"
-                                    vizType="donut">
-                                    <viz:dataset>
-                                        <vizData:FlattenedDataset data="{/pieData}">
-                                            <vizData:dimensions>
-                                                <vizData:DimensionDefinition name="Module" value="{module}"/>
-                                            </vizData:dimensions>
-                                            <vizData:measures>
-                                                <vizData:MeasureDefinition name="Count" value="{count}"/>
-                                            </vizData:measures>
-                                        </vizData:FlattenedDataset>
-                                    </viz:dataset>
-                                    <viz:feeds>
-                                        <vizFeeds:FeedItem uid="size"  type="Measure"   values="Count"/>
-                                        <vizFeeds:FeedItem uid="color" type="Dimension" values="Module"/>
-                                    </viz:feeds>
-                                </viz:VizFrame>
-                            </content>
-                        </Panel>
+                                    <viz:VizFrame id="pieChart"
+                                        uiConfig="{applicationSet:'fiori'}"
+                                        height="200px" width="100%"
+                                        vizType="donut">
+                                        <viz:dataset>
+                                            <vizData:FlattenedDataset data="{/pieData}">
+                                                <vizData:dimensions>
+                                                    <vizData:DimensionDefinition name="Module" value="{module}"/>
+                                                </vizData:dimensions>
+                                                <vizData:measures>
+                                                    <vizData:MeasureDefinition name="Count" value="{count}"/>
+                                                </vizData:measures>
+                                            </vizData:FlattenedDataset>
+                                        </viz:dataset>
+                                        <viz:feeds>
+                                            <vizFeeds:FeedItem uid="size"  type="Measure"   values="Count"/>
+                                            <vizFeeds:FeedItem uid="color" type="Dimension" values="Module"/>
+                                        </viz:feeds>
+                                    </viz:VizFrame>
+                                </content>
+                            </Panel>
+                        </VBox>
 
-                        <!-- Month -->
-                        <Panel headerText="Top 3 MFU Templates by Usage (by Month)"
-                               class="chartPanel" expandable="false">
-                            <content>
-                                <viz:VizFrame id="monthChart"
-                                    uiConfig="{applicationSet:'fiori'}"
-                                    height="220px" width="100%"
-                                    vizType="column">
-                                    <viz:dataset>
-                                        <vizData:FlattenedDataset data="{/topMonthData}">
-                                            <vizData:dimensions>
-                                                <vizData:DimensionDefinition name="Template" value="{template}"/>
-                                            </vizData:dimensions>
-                                            <vizData:measures>
-                                                <vizData:MeasureDefinition name="Usage" value="{usage}"/>
-                                            </vizData:measures>
-                                        </vizData:FlattenedDataset>
-                                    </viz:dataset>
-                                    <viz:feeds>
-                                        <vizFeeds:FeedItem uid="valueAxis"    type="Measure"   values="Usage"/>
-                                        <vizFeeds:FeedItem uid="categoryAxis" type="Dimension" values="Template"/>
-                                    </viz:feeds>
-                                </viz:VizFrame>
-                            </content>
-                        </Panel>
+                        <!-- Month — 20% -->
+                        <VBox class="usageSection">
+                            <Panel class="chartPanel" expandable="false">
+                                <Panel.headerText>Top 3 MFU Templates by Usage
+(by Month)</Panel.headerText>
+                                <content>
+                                    <viz:VizFrame id="monthChart"
+                                        uiConfig="{applicationSet:'fiori'}"
+                                        height="230px" width="100%"
+                                        vizType="column">
+                                        <viz:dataset>
+                                            <vizData:FlattenedDataset data="{/topMonthData}">
+                                                <vizData:dimensions>
+                                                    <vizData:DimensionDefinition name="Template" value="{template}"/>
+                                                </vizData:dimensions>
+                                                <vizData:measures>
+                                                    <vizData:MeasureDefinition name="Usage" value="{usage}"/>
+                                                </vizData:measures>
+                                            </vizData:FlattenedDataset>
+                                        </viz:dataset>
+                                        <viz:feeds>
+                                            <vizFeeds:FeedItem uid="valueAxis"    type="Measure"   values="Usage"/>
+                                            <vizFeeds:FeedItem uid="categoryAxis" type="Dimension" values="Template"/>
+                                        </viz:feeds>
+                                    </viz:VizFrame>
+                                </content>
+                            </Panel>
+                        </VBox>
 
-                        <!-- Quarter -->
-                        <Panel headerText="Top 3 MFU Templates by Usage (by Quarter)"
-                               class="chartPanel" expandable="false">
-                            <content>
-                                <viz:VizFrame id="quarterChart"
-                                    uiConfig="{applicationSet:'fiori'}"
-                                    height="220px" width="100%"
-                                    vizType="column">
-                                    <viz:dataset>
-                                        <vizData:FlattenedDataset data="{/topQuarterData}">
-                                            <vizData:dimensions>
-                                                <vizData:DimensionDefinition name="Template" value="{template}"/>
-                                            </vizData:dimensions>
-                                            <vizData:measures>
-                                                <vizData:MeasureDefinition name="Usage" value="{usage}"/>
-                                            </vizData:measures>
-                                        </vizData:FlattenedDataset>
-                                    </viz:dataset>
-                                    <viz:feeds>
-                                        <vizFeeds:FeedItem uid="valueAxis"    type="Measure"   values="Usage"/>
-                                        <vizFeeds:FeedItem uid="categoryAxis" type="Dimension" values="Template"/>
-                                    </viz:feeds>
-                                </viz:VizFrame>
-                            </content>
-                        </Panel>
+                        <!-- Quarter — 20% -->
+                        <VBox class="usageSection">
+                            <Panel class="chartPanel" expandable="false">
+                                <Panel.headerText>Top 3 MFU Templates by Usage
+(by Quarter)</Panel.headerText>
+                                <content>
+                                    <viz:VizFrame id="quarterChart"
+                                        uiConfig="{applicationSet:'fiori'}"
+                                        height="230px" width="100%"
+                                        vizType="column">
+                                        <viz:dataset>
+                                            <vizData:FlattenedDataset data="{/topQuarterData}">
+                                                <vizData:dimensions>
+                                                    <vizData:DimensionDefinition name="Template" value="{template}"/>
+                                                </vizData:dimensions>
+                                                <vizData:measures>
+                                                    <vizData:MeasureDefinition name="Usage" value="{usage}"/>
+                                                </vizData:measures>
+                                            </vizData:FlattenedDataset>
+                                        </viz:dataset>
+                                        <viz:feeds>
+                                            <vizFeeds:FeedItem uid="valueAxis"    type="Measure"   values="Usage"/>
+                                            <vizFeeds:FeedItem uid="categoryAxis" type="Dimension" values="Template"/>
+                                        </viz:feeds>
+                                    </viz:VizFrame>
+                                </content>
+                            </Panel>
+                        </VBox>
 
-                        <!-- Year -->
-                        <Panel headerText="Top 3 MFU Templates by Usage (by Year)"
-                               class="chartPanel" expandable="false">
-                            <content>
-                                <viz:VizFrame id="yearChart"
-                                    uiConfig="{applicationSet:'fiori'}"
-                                    height="220px" width="100%"
-                                    vizType="column">
-                                    <viz:dataset>
-                                        <vizData:FlattenedDataset data="{/topYearData}">
-                                            <vizData:dimensions>
-                                                <vizData:DimensionDefinition name="Template" value="{template}"/>
-                                            </vizData:dimensions>
-                                            <vizData:measures>
-                                                <vizData:MeasureDefinition name="Usage" value="{usage}"/>
-                                            </vizData:measures>
-                                        </vizData:FlattenedDataset>
-                                    </viz:dataset>
-                                    <viz:feeds>
-                                        <vizFeeds:FeedItem uid="valueAxis"    type="Measure"   values="Usage"/>
-                                        <vizFeeds:FeedItem uid="categoryAxis" type="Dimension" values="Template"/>
-                                    </viz:feeds>
-                                </viz:VizFrame>
-                            </content>
-                        </Panel>
+                        <!-- Year — 20% -->
+                        <VBox class="usageSection">
+                            <Panel class="chartPanel" expandable="false">
+                                <Panel.headerText>Top 3 MFU Templates by Usage
+(by Year)</Panel.headerText>
+                                <content>
+                                    <viz:VizFrame id="yearChart"
+                                        uiConfig="{applicationSet:'fiori'}"
+                                        height="230px" width="100%"
+                                        vizType="column">
+                                        <viz:dataset>
+                                            <vizData:FlattenedDataset data="{/topYearData}">
+                                                <vizData:dimensions>
+                                                    <vizData:DimensionDefinition name="Template" value="{template}"/>
+                                                </vizData:dimensions>
+                                                <vizData:measures>
+                                                    <vizData:MeasureDefinition name="Usage" value="{usage}"/>
+                                                </vizData:measures>
+                                            </vizData:FlattenedDataset>
+                                        </viz:dataset>
+                                        <viz:feeds>
+                                            <vizFeeds:FeedItem uid="valueAxis"    type="Measure"   values="Usage"/>
+                                            <vizFeeds:FeedItem uid="categoryAxis" type="Dimension" values="Template"/>
+                                        </viz:feeds>
+                                    </viz:VizFrame>
+                                </content>
+                            </Panel>
+                        </VBox>
 
-                    </l:Grid>
+                    </HBox>
 
                     <!-- ── MFU Details Table ── -->
-                    <Panel headerText="MFU Details" class="chartPanel" expandable="false">
+                    <Panel headerText="MFU Details" class="chartPanel tablePanel" expandable="false">
                         <content>
                             <Table id="mfuTable" items="{/tableData}" class="mfuTable"
                                    noDataText="No data available" sticky="ColumnHeaders">

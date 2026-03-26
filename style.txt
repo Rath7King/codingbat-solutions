@@ -69,9 +69,16 @@
     font-weight: 700 !important;
 }
 
-/* ══════════════════════════════════════════
-   ROW 1 — HBox: KPI 40% | Module Chart 60%
-   ══════════════════════════════════════════ */
+/* ── Main content wrapper ── */
+.mainContent,
+.mainContent.sapMVBox {
+    padding: 8px 10px !important;
+    gap: 8px !important;
+}
+
+/* ══════════════════════════════════════════════════
+   ROW 1 — HBox: KPI 40% | Module Stacked Chart 60%
+   ══════════════════════════════════════════════════ */
 .row1Wrap,
 .row1Wrap.sapMHBox {
     display: flex !important;
@@ -79,61 +86,62 @@
     align-items: stretch !important;
     width: 100% !important;
     gap: 8px !important;
+    margin-bottom: 8px !important;
 }
 
-/* ── KPI half — exactly 40% ── */
-.kpiHalf,
-.kpiHalf.sapMVBox {
+/* ── KPI section: exactly 40% ── */
+.kpiSection,
+.kpiSection.sapMVBox {
     width: 40% !important;
     flex-shrink: 0 !important;
     flex-grow: 0 !important;
     flex-basis: 40% !important;
     max-width: 40% !important;
+    gap: 6px !important;
+    display: flex !important;
+    flex-direction: column !important;
 }
 
-/* ── Module half — fills remaining 60% ── */
-.moduleHalf,
-.moduleHalf.sapMVBox {
-    flex: 1 1 60% !important;
-    min-width: 0 !important;
-    max-width: 60% !important;
+/* ── KPI rows (top pair, bottom pair) ── */
+.kpiRow,
+.kpiRow.sapMHBox {
+    display: flex !important;
+    flex-direction: row !important;
+    gap: 6px !important;
+    flex: 1 !important;
 }
 
-/* ── KPI Grid ── */
-.kpiGrid,
-.kpiGrid.sapUiLayoutGrid {
-    width: 100% !important;
-    height: 100% !important;
-}
-
-/* ── KPI Card ── */
+/* ── Individual KPI card ── */
 .kpiCard,
 .kpiCard.sapMVBox {
-    height: 100% !important;
+    flex: 1 !important;
     padding: 12px 14px !important;
     background: #ffffff !important;
-    border: 1px solid #e0e0e0 !important;
-    border-left: 4px solid #1565C0 !important;
+    /* NO border-left blue line — removed */
+    border: 1px solid #e8e8e8 !important;
     border-radius: 6px !important;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.06) !important;
-    min-height: 108px !important;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05) !important;
+    display: flex !important;
+    flex-direction: column !important;
+    justify-content: space-between !important;
+    min-height: 100px !important;
 }
 
-/* ── KPI label — green left-border accent ── */
+/* ── KPI label — green left-accent bar only (no blue) ── */
 .kpiLabel .sapMText,
 .kpiLabel.sapMText {
-    font-size: 0.75rem !important;
+    font-size: 0.76rem !important;
     font-weight: 600 !important;
     color: #444 !important;
     line-height: 1.35 !important;
+    padding-left: 6px !important;
     border-left: 3px solid #4CAF50 !important;
-    padding-left: 5px !important;
 }
 
-/* ── KPI value — green ── */
+/* ── KPI value ── */
 .kpiValue .sapMText,
 .kpiValue.sapMText {
-    font-size: 2rem !important;
+    font-size: 2.2rem !important;
     font-weight: 800 !important;
     color: #4CAF50 !important;
     line-height: 1 !important;
@@ -146,15 +154,22 @@
 .kpiSubLabel.sapMText {
     font-size: 0.6rem !important;
     color: #aaa !important;
-    letter-spacing: 0.05em;
-    margin-top: 2px !important;
+    letter-spacing: 0.05em !important;
     text-transform: uppercase !important;
+    margin-top: 2px !important;
 }
 
-/* ── Module panel — fills full height ── */
+/* ── Module section: fills 60% ── */
+.moduleSection,
+.moduleSection.sapMVBox {
+    flex: 1 1 60% !important;
+    min-width: 0 !important;
+    max-width: 60% !important;
+}
+
+/* ── Module panel ── */
 .modulePanel,
 .modulePanel.sapMPanel {
-    flex: 1 1 auto !important;
     height: 100% !important;
     background: #ffffff !important;
     border: 1px solid #e4e4e4 !important;
@@ -165,17 +180,50 @@
 .modulePanel > .sapMPanelHdr,
 .modulePanel.sapMPanel > .sapMPanelHdr {
     padding: 8px 14px !important;
-    font-size: 0.78rem !important;
-    font-weight: 600 !important;
-    color: #333 !important;
+    font-size: 0.8rem !important;
+    font-weight: 700 !important;
+    color: #222 !important;
     background: #ffffff !important;
     border-bottom: 1px solid #f0f0f0 !important;
     border-radius: 6px 6px 0 0 !important;
 }
 
-/* ══════════════════════════════════════════
-   ROW 2 — 4 equal chart panels
-   ══════════════════════════════════════════ */
+/* ── Legend bar (inside module panel) ── */
+.legendBar,
+.legendBar.sapMHBox {
+    padding: 4px 10px !important;
+}
+
+/* ══════════════════════════════════════════════════
+   ROW 2 — HBox: Donut 40% | 3 usage charts 60%
+   (each usage chart = 20% of total = 33% of 60%)
+   ══════════════════════════════════════════════════ */
+.row2Wrap,
+.row2Wrap.sapMHBox {
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: stretch !important;
+    width: 100% !important;
+    gap: 8px !important;
+    margin-bottom: 8px !important;
+}
+
+/* ── Donut section: 40% (aligns under KPI cards) ── */
+.donutSection,
+.donutSection.sapMVBox {
+    width: 40% !important;
+    flex-shrink: 0 !important;
+    flex-grow: 0 !important;
+    flex-basis: 40% !important;
+    max-width: 40% !important;
+}
+
+/* ── Each usage chart: equal share of remaining 60% ── */
+.usageSection,
+.usageSection.sapMVBox {
+    flex: 1 1 0 !important;
+    min-width: 0 !important;
+}
 
 /* ── Generic chart panel ── */
 .chartPanel,
@@ -186,21 +234,37 @@
     box-shadow: 0 1px 4px rgba(0,0,0,0.05) !important;
     height: 100% !important;
 }
+
+/* Panel header — two-line wrap allowed, compact height */
 .chartPanel > .sapMPanelHdr,
 .chartPanel.sapMPanel > .sapMPanelHdr {
     padding: 6px 12px !important;
-    font-size: 0.73rem !important;
-    font-weight: 600 !important;
-    color: #333 !important;
+    font-size: 0.74rem !important;
+    font-weight: 700 !important;
+    color: #222 !important;
     background: #ffffff !important;
     border-bottom: 1px solid #f0f0f0 !important;
     border-radius: 6px 6px 0 0 !important;
-    /* Allow header text to wrap so long titles fit compactly */
-    white-space: normal !important;
-    line-height: 1.3 !important;
+    /* Allow title to wrap onto two lines */
+    white-space: pre-line !important;
+    line-height: 1.4 !important;
+    word-break: break-word !important;
 }
 
-/* ── Legend ── */
+/* ── Table panel ── */
+.tablePanel,
+.tablePanel.sapMPanel {
+    height: auto !important;
+}
+
+/* ── Pie legend ── */
+.pieLegendBar,
+.pieLegendBar.sapMHBox {
+    padding: 5px 10px 2px !important;
+    flex-wrap: wrap !important;
+}
+
+/* ── Legend text & icons ── */
 .legendText .sapMText,
 .legendText.sapMText {
     font-size: 0.68rem !important;
@@ -229,7 +293,7 @@
     font-size: 0.68rem !important;
     font-weight: 700 !important;
     color: #555 !important;
-    letter-spacing: 0.03em;
+    letter-spacing: 0.03em !important;
     text-transform: uppercase !important;
 }
 .mfuTable .sapMLIB {
