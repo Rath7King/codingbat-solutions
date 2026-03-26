@@ -24,83 +24,62 @@ sap.ui.define([
 
         _configureCharts: function () {
 
-            // Module — stacked column (white labels, no grid, no axis ticks)
+            // Module — stacked column
             this._setViz("moduleBarChart", {
                 legend:       { visible: false },
                 title:        { visible: false },
                 categoryAxis: { title: { visible: false } },
-                valueAxis: {
-                    title:    { visible: false },
-                    gridline: { visible: false },
-                    label:    { visible: false }
-                },
+                valueAxis:    { title: { visible: false } },
                 plotArea: {
                     colorPalette: ["#1f3d7a", "#4db8a4", "#7ec8a0"],
                     dataLabel: {
                         visible:         true,
                         formatString:    "#",
-                        hideWhenOverlap: true,
-                        style:           { color: "#ffffff" }
+                        hideWhenOverlap: true
                     }
                 }
             });
 
-            // Donut — percentage labels near each slice
+            // Donut — templates by count
             this._setViz("pieChart", {
                 legend: { visible: false },
                 title:  { visible: false },
                 plotArea: {
                     colorPalette: ["#2196a8", "#4db8a4", "#7ec8c8", "#1a5276", "#34495e"],
-                    dataLabel: {
-                        visible: true,
-                        type:    "percentage",
-                        style:   { fontSize: "11", color: "#333333" }
-                    }
+                    dataLabel:    { visible: true, type: "percentage" }
                 }
             });
 
-            // Top 3 — by Month (no grid, no axis ticks)
+            // Top 3 — by Month
             this._setViz("monthChart", {
                 legend:       { visible: false },
                 title:        { visible: false },
                 categoryAxis: { title: { visible: false } },
-                valueAxis: {
-                    title:    { visible: false },
-                    gridline: { visible: false },
-                    label:    { visible: false }
-                },
+                valueAxis:    { title: { visible: false } },
                 plotArea: {
                     colorPalette: ["#2196a8", "#4db8a4", "#7ec8c8"],
                     dataLabel:    { visible: true }
                 }
             });
 
-            // Top 3 — by Quarter (no grid, no axis ticks)
+            // Top 3 — by Quarter
             this._setViz("quarterChart", {
                 legend:       { visible: false },
                 title:        { visible: false },
                 categoryAxis: { title: { visible: false } },
-                valueAxis: {
-                    title:    { visible: false },
-                    gridline: { visible: false },
-                    label:    { visible: false }
-                },
+                valueAxis:    { title: { visible: false } },
                 plotArea: {
                     colorPalette: ["#1f3d7a", "#2d6a9f", "#34495e"],
                     dataLabel:    { visible: true }
                 }
             });
 
-            // Top 3 — by Year (no grid, no axis ticks)
+            // Top 3 — by Year
             this._setViz("yearChart", {
                 legend:       { visible: false },
                 title:        { visible: false },
                 categoryAxis: { title: { visible: false } },
-                valueAxis: {
-                    title:    { visible: false },
-                    gridline: { visible: false },
-                    label:    { visible: false }
-                },
+                valueAxis:    { title: { visible: false } },
                 plotArea: {
                     colorPalette: ["#4db8a4", "#2196a8", "#1f6b3a"],
                     dataLabel:    { visible: true }

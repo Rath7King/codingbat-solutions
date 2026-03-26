@@ -18,7 +18,7 @@
 
 .aspireLabel > .sapMText {
     font-size: 0.7rem !important;
-    color: #1565C0 !important;
+    color: #888 !important;
     text-transform: uppercase;
     letter-spacing: 0.06em;
 }
@@ -59,13 +59,13 @@
 /* ── Banner ──────────────────────────────────── */
 
 .banner {
-    background: #C8E6C9 !important;
+    background: #4CAF50 !important;
     padding: 10px 20px !important;
     width: 100% !important;
 }
 
 .bannerText > .sapMText {
-    color: #000000 !important;
+    color: #ffffff !important;
     font-size: 1.05rem !important;
     font-weight: 700 !important;
 }
