@@ -1,310 +1,265 @@
-/* =====================================================
+/* ===============================================
    Aspire FinSight — MFU Dashboard
-   ===================================================== */
+   =============================================== */
 
-/* ── Page background ── */
+
+/* ── Page ────────────────────────────────────── */
+
 .sapMPageBg {
-    background-color: #eef1f5 !important;
+    background: #eef1f5 !important;
 }
 
-/* ── Aspire label ── */
-.aspireLabel .sapMText,
-.aspireLabel.sapMText {
-    font-size: 0.72rem !important;
+
+/* ── Header ──────────────────────────────────── */
+
+.pageHeader {
+    padding: 12px 20px 8px !important;
+}
+
+.aspireLabel {
+    font-size: 0.7rem !important;
     color: #888 !important;
     text-transform: uppercase;
-    letter-spacing: 0.05em;
+    letter-spacing: 0.06em;
 }
 
-/* ── Fin = Blue ── */
-.brandFin .sapMText,
-.brandFin.sapMText {
+.brandFin {
     font-size: 2rem !important;
     font-weight: 800 !important;
     color: #1565C0 !important;
     line-height: 1 !important;
 }
 
-/* ── Sight = Green ── */
-.brandSight .sapMText,
-.brandSight.sapMText {
+.brandSight {
     font-size: 2rem !important;
     font-weight: 800 !important;
     color: #43A047 !important;
     line-height: 1 !important;
 }
 
-/* ── Date box ── */
-.dateBox,
-.dateBox.sapMHBox {
-    background: #ffffff !important;
+.dateBox {
+    background: #fff !important;
     border: 1px solid #ddd !important;
     border-radius: 4px !important;
-    padding: 3px 8px !important;
+    padding: 4px 10px !important;
+    gap: 6px !important;
 }
-.dateIcon,
-.dateIcon.sapUiIcon {
+
+.dateIcon {
     font-size: 0.75rem !important;
     color: #555 !important;
 }
-.dateText .sapMText,
-.dateText.sapMText {
-    font-size: 0.68rem !important;
+
+.dateText {
+    font-size: 0.7rem !important;
     color: #555 !important;
 }
 
-/* ── Full-width green banner ── */
-.dashboardBanner,
-.dashboardBanner.sapMHBox {
+
+/* ── Banner ──────────────────────────────────── */
+
+.banner {
     background: #4CAF50 !important;
     padding: 10px 20px !important;
     width: 100% !important;
-    margin-left: 0 !important;
-    margin-right: 0 !important;
 }
-.dashboardBannerText .sapMText,
-.dashboardBannerText.sapMText {
-    color: #ffffff !important;
-    font-size: 1.1rem !important;
+
+.bannerText {
+    color: #fff !important;
+    font-size: 1.05rem !important;
     font-weight: 700 !important;
 }
 
-/* ── Main content wrapper ── */
-.mainContent,
-.mainContent.sapMVBox {
-    padding: 8px 10px !important;
-    gap: 8px !important;
+
+/* ── Main Wrapper ────────────────────────────── */
+
+.mainWrap {
+    padding: 14px 16px !important;
+    gap: 12px !important;
 }
 
-/* ══════════════════════════════════════════════════
-   ROW 1 — HBox: KPI 40% | Module Stacked Chart 60%
-   ══════════════════════════════════════════════════ */
-.row1Wrap,
-.row1Wrap.sapMHBox {
-    display: flex !important;
-    flex-direction: row !important;
-    align-items: stretch !important;
+
+/* ── Layout Rows ─────────────────────────────── */
+
+.row1,
+.row2 {
     width: 100% !important;
-    gap: 8px !important;
-    margin-bottom: 8px !important;
+    gap: 12px !important;
 }
 
-/* ── KPI section: exactly 40% ── */
-.kpiSection,
-.kpiSection.sapMVBox {
+
+/* ── KPI Section ─────────────────────────────── */
+
+.kpiSection {
     width: 40% !important;
-    flex-shrink: 0 !important;
-    flex-grow: 0 !important;
-    flex-basis: 40% !important;
-    max-width: 40% !important;
-    gap: 6px !important;
-    display: flex !important;
-    flex-direction: column !important;
+    flex: 0 0 40% !important;
+    gap: 10px !important;
 }
 
-/* ── KPI rows (top pair, bottom pair) ── */
-.kpiRow,
-.kpiRow.sapMHBox {
-    display: flex !important;
-    flex-direction: row !important;
-    gap: 6px !important;
+.kpiRow {
+    gap: 10px !important;
     flex: 1 !important;
 }
 
-/* ── Individual KPI card ── */
-.kpiCard,
-.kpiCard.sapMVBox {
+.kpiCard {
     flex: 1 !important;
-    padding: 12px 14px !important;
-    background: #ffffff !important;
-    /* NO border-left blue line — removed */
+    min-height: 108px !important;
+    padding: 14px 16px !important;
+    background: #fff !important;
     border: 1px solid #e8e8e8 !important;
-    border-radius: 6px !important;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.05) !important;
-    display: flex !important;
-    flex-direction: column !important;
+    border-radius: 8px !important;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06) !important;
     justify-content: space-between !important;
-    min-height: 100px !important;
 }
 
-/* ── KPI label — green left-accent bar only (no blue) ── */
-.kpiLabel .sapMText,
-.kpiLabel.sapMText {
+.kpiLbl {
     font-size: 0.76rem !important;
     font-weight: 600 !important;
     color: #444 !important;
-    line-height: 1.35 !important;
-    padding-left: 6px !important;
     border-left: 3px solid #4CAF50 !important;
+    padding-left: 6px !important;
+    line-height: 1.4 !important;
 }
 
-/* ── KPI value ── */
-.kpiValue .sapMText,
-.kpiValue.sapMText {
+.kpiVal {
     font-size: 2.2rem !important;
     font-weight: 800 !important;
     color: #4CAF50 !important;
     line-height: 1 !important;
+    margin-top: 8px !important;
     display: block !important;
-    margin-top: 6px !important;
 }
 
-/* ── KPI sub label ── */
-.kpiSubLabel .sapMText,
-.kpiSubLabel.sapMText {
-    font-size: 0.6rem !important;
+.kpiSub {
+    font-size: 0.62rem !important;
     color: #aaa !important;
-    letter-spacing: 0.05em !important;
-    text-transform: uppercase !important;
-    margin-top: 2px !important;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-top: 3px !important;
 }
 
-/* ── Module section: fills 60% ── */
-.moduleSection,
-.moduleSection.sapMVBox {
+
+/* ── Chart Sections ──────────────────────────── */
+
+.moduleSection {
     flex: 1 1 60% !important;
     min-width: 0 !important;
-    max-width: 60% !important;
 }
 
-/* ── Module panel ── */
-.modulePanel,
-.modulePanel.sapMPanel {
-    height: 100% !important;
-    background: #ffffff !important;
-    border: 1px solid #e4e4e4 !important;
-    border-radius: 6px !important;
-    box-shadow: 0 1px 4px rgba(0,0,0,0.05) !important;
-    width: 100% !important;
-}
-.modulePanel > .sapMPanelHdr,
-.modulePanel.sapMPanel > .sapMPanelHdr {
-    padding: 8px 14px !important;
-    font-size: 0.8rem !important;
-    font-weight: 700 !important;
-    color: #222 !important;
-    background: #ffffff !important;
-    border-bottom: 1px solid #f0f0f0 !important;
-    border-radius: 6px 6px 0 0 !important;
-}
-
-/* ── Legend bar (inside module panel) ── */
-.legendBar,
-.legendBar.sapMHBox {
-    padding: 4px 10px !important;
-}
-
-/* ══════════════════════════════════════════════════
-   ROW 2 — HBox: Donut 40% | 3 usage charts 60%
-   (each usage chart = 20% of total = 33% of 60%)
-   ══════════════════════════════════════════════════ */
-.row2Wrap,
-.row2Wrap.sapMHBox {
-    display: flex !important;
-    flex-direction: row !important;
-    align-items: stretch !important;
-    width: 100% !important;
-    gap: 8px !important;
-    margin-bottom: 8px !important;
-}
-
-/* ── Donut section: 40% (aligns under KPI cards) ── */
-.donutSection,
-.donutSection.sapMVBox {
+.donutSection {
     width: 40% !important;
-    flex-shrink: 0 !important;
-    flex-grow: 0 !important;
-    flex-basis: 40% !important;
-    max-width: 40% !important;
+    flex: 0 0 40% !important;
 }
 
-/* ── Each usage chart: equal share of remaining 60% ── */
-.usageSection,
-.usageSection.sapMVBox {
+.usageSection {
     flex: 1 1 0 !important;
     min-width: 0 !important;
 }
 
-/* ── Generic chart panel ── */
-.chartPanel,
-.chartPanel.sapMPanel {
-    background: #ffffff !important;
-    border: 1px solid #e4e4e4 !important;
-    border-radius: 6px !important;
-    box-shadow: 0 1px 4px rgba(0,0,0,0.05) !important;
+
+/* ── Panel Card ──────────────────────────────── */
+
+.panelBox {
+    background: #fff !important;
+    border: 1px solid #e2e2e2 !important;
+    border-radius: 8px !important;
+    box-shadow: 0 1px 5px rgba(0, 0, 0, 0.06) !important;
     height: 100% !important;
+    overflow: hidden !important;
 }
 
-/* Panel header — two-line wrap allowed, compact height */
-.chartPanel > .sapMPanelHdr,
-.chartPanel.sapMPanel > .sapMPanelHdr {
-    padding: 6px 12px !important;
-    font-size: 0.74rem !important;
+
+/* ── Panel Headers ───────────────────────────── */
+
+.panelHdr {
+    padding: 10px 14px 8px !important;
+    border-bottom: 1px solid #f0f0f0 !important;
+}
+
+.panelTitlePad {
+    padding: 10px 14px 9px !important;
+    display: block !important;
+    border-bottom: 1px solid #f0f0f0 !important;
+}
+
+.usageTitlePad {
+    padding: 9px 14px 7px !important;
+    gap: 2px !important;
+    border-bottom: 1px solid #f0f0f0 !important;
+}
+
+.panelTitle {
+    font-size: 0.78rem !important;
     font-weight: 700 !important;
     color: #222 !important;
-    background: #ffffff !important;
-    border-bottom: 1px solid #f0f0f0 !important;
-    border-radius: 6px 6px 0 0 !important;
-    /* Allow title to wrap onto two lines */
-    white-space: pre-line !important;
-    line-height: 1.4 !important;
-    word-break: break-word !important;
+    line-height: 1.3 !important;
 }
 
-/* ── Table panel ── */
-.tablePanel,
-.tablePanel.sapMPanel {
-    height: auto !important;
+.panelSubTitle {
+    font-size: 0.72rem !important;
+    font-weight: 400 !important;
+    color: #666 !important;
 }
 
-/* ── Pie legend ── */
-.pieLegendBar,
-.pieLegendBar.sapMHBox {
-    padding: 5px 10px 2px !important;
+
+/* ── Chart Inner Padding ─────────────────────── */
+
+.chartPad {
+    padding: 8px 8px 4px !important;
+}
+
+
+/* ── Legends ─────────────────────────────────── */
+
+.lgRow {
+    gap: 4px !important;
+}
+
+.pieLgRow {
+    padding: 6px 14px 4px !important;
+    gap: 6px !important;
     flex-wrap: wrap !important;
+    border-bottom: 1px solid #f0f0f0 !important;
 }
 
-/* ── Legend text & icons ── */
-.legendText .sapMText,
-.legendText.sapMText {
-    font-size: 0.68rem !important;
+.lgText {
+    font-size: 0.7rem !important;
     color: #555 !important;
+    margin-right: 8px !important;
 }
-.legendIconApproved,
-.legendIconApproved.sapUiIcon { font-size: 0.65rem !important; color: #1f3d7a !important; }
-.legendIconPending,
-.legendIconPending.sapUiIcon  { font-size: 0.65rem !important; color: #4db8a4 !important; }
-.legendIconUploaded,
-.legendIconUploaded.sapUiIcon { font-size: 0.65rem !important; color: #7ec8a0 !important; }
-.legendESG,
-.legendESG.sapUiIcon          { font-size: 0.65rem !important; color: #2196a8 !important; }
-.legendFINCOST,
-.legendFINCOST.sapUiIcon      { font-size: 0.65rem !important; color: #4db8a4 !important; }
-.legendICON,
-.legendICON.sapUiIcon         { font-size: 0.65rem !important; color: #7ec8c8 !important; }
-.legendNFRP,
-.legendNFRP.sapUiIcon         { font-size: 0.65rem !important; color: #1a5276 !important; }
-.legendTREASURY,
-.legendTREASURY.sapUiIcon     { font-size: 0.65rem !important; color: #34495e !important; }
 
-/* ── MFU Details Table ── */
+.lgApproved { font-size: 0.65rem !important; color: #1f3d7a !important; margin-right: 3px !important; }
+.lgPending  { font-size: 0.65rem !important; color: #4db8a4 !important; margin-right: 3px !important; margin-left: 4px !important; }
+.lgUploaded { font-size: 0.65rem !important; color: #7ec8a0 !important; margin-right: 3px !important; margin-left: 4px !important; }
+.lgESG      { font-size: 0.65rem !important; color: #2196a8 !important; margin-right: 3px !important; }
+.lgFINCOST  { font-size: 0.65rem !important; color: #4db8a4 !important; margin-right: 3px !important; }
+.lgICON     { font-size: 0.65rem !important; color: #7ec8c8 !important; margin-right: 3px !important; }
+.lgNFRP     { font-size: 0.65rem !important; color: #1a5276 !important; margin-right: 3px !important; }
+.lgTREASURY { font-size: 0.65rem !important; color: #34495e !important; margin-right: 3px !important; }
+
+
+/* ── MFU Details Table ───────────────────────── */
+
 .mfuTable .sapMListTblHeaderCell {
-    background: #f5f5f5 !important;
+    background: #f7f7f7 !important;
     font-size: 0.68rem !important;
     font-weight: 700 !important;
     color: #555 !important;
-    letter-spacing: 0.03em !important;
-    text-transform: uppercase !important;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 8px 12px !important;
 }
+
 .mfuTable .sapMLIB {
-    border-bottom: 1px solid #f5f5f5 !important;
+    border-bottom: 1px solid #f3f3f3 !important;
 }
+
 .mfuTable .sapMText {
     font-size: 0.76rem !important;
     color: #333 !important;
 }
-.loadCount .sapMText,
-.loadCount.sapMText {
+
+.loadCount {
     font-weight: 600 !important;
     color: #1565C0 !important;
 }
