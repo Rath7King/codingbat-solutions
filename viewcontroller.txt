@@ -1,160 +1,132 @@
 sap.ui.define([
     "sap/ui/core/mvc/Controller",
     "sap/ui/model/json/JSONModel",
-    "sap/viz/ui5/controls/VizFrame",
-    "sap/viz/ui5/controls/common/feeds/FeedItem",
-    "sap/viz/ui5/data/FlattenedDataset"
-], function(Controller, JSONModel, VizFrame, FeedItem, FlattenedDataset) {
+    "sap/viz/ui5/controls/common/feeds/FeedItem"
+], function (Controller, JSONModel, FeedItem) {
     "use strict";
 
     return Controller.extend("project1.controller.View1", {
 
-        onInit: function() {
-            this._initModel();
+        onInit: function () {
+            this.getView().setModel(new JSONModel());
+            this._loadDashboard();
         },
 
-        onAfterRendering: function() {
+        onAfterRendering: function () {
             this._configureCharts();
         },
 
-        _initModel: function() {
-            var oModel = new JSONModel({
-                createdDate: "CREATEDDAY: Dec 28, 2025 0:0...",
-                kpi: {
-                    uploaded:  "71",
-                    approved:  "60",
-                    onboarded: "114",
-                    rejected:  "-"
-                },
-                moduleData: [
-                    { module: "ESG",      approved: 25, pending: 5, uploaded: 1 },
-                    { module: "FINCOST",  approved: 2,  pending: 2, uploaded: 0 },
-                    { module: "ICON",     approved: 6,  pending: 1, uploaded: 1 },
-                    { module: "NFRP",     approved: 22, pending: 2, uploaded: 0 },
-                    { module: "TREASURY", approved: 5,  pending: 0, uploaded: 0 }
-                ],
-                pieData: [
-                    { module: "ESG",      count: 33.86 },
-                    { module: "FINCOST",  count: 5.63  },
-                    { module: "ICON",     count: 5.43  },
-                    { module: "NFRP",     count: 6.45  },
-                    { module: "TREASURY", count: 43.05 }
-                ],
-                topMonthData: [
-                    { template: "NFRP", usage: 23 },
-                    { template: "ESG",  usage: 17 },
-                    { template: "ICON", usage: 2  }
-                ],
-                topQuarterData: [
-                    { template: "ESG",      usage: 31 },
-                    { template: "NFRP",     usage: 24 },
-                    { template: "TREASURY", usage: 6  }
-                ],
-                topYearData: [
-                    { template: "ESG",      usage: 31 },
-                    { template: "NFRP",     usage: 24 },
-                    { template: "TREASURY", usage: 6  }
-                ],
-                tableData: [
-                    { moduleName: "ESG", subModuleName: "MAPPING MASTER", loadType: "TRUNCATE", loadTemplate: "MFU BOOKING ENTITY XLATE", loadCount: "17,655"  },
-                    { moduleName: "",    subModuleName: "",                loadType: "",         loadTemplate: "MFU BUSINESS INPUT",        loadCount: "223,375" },
-                    { moduleName: "",    subModuleName: "",                loadType: "",         loadTemplate: "MFU CREDITNATE LIMIT",       loadCount: "18,200"  },
-                    { moduleName: "",    subModuleName: "",                loadType: "",         loadTemplate: "MFU DEAL PIPELINE",          loadCount: "114,454" },
-                    { moduleName: "",    subModuleName: "",                loadType: "",         loadTemplate: "MFU ENTITY XLATE",           loadCount: "303,321" },
-                    { moduleName: "",    subModuleName: "",                loadType: "",         loadTemplate: "MFU INTEGRATED SF",          loadCount: "13,241"  },
-                    { moduleName: "",    subModuleName: "",                loadType: "",         loadTemplate: "",                           loadCount: "12,988"  }
-                ]
+        // ── Fetch helper ──
+        _get: function (entity) {
+            return fetch("/odata/v4/mfu/" + entity)
+                .then(function (r) { return r.json(); })
+                .then(function (j) { return j.value || j; });
+        },
+
+        // ── Load all data ──
+        _loadDashboard: function () {
+            var oModel = this.getView().getModel();
+            var _get   = this._get.bind(this);
+
+            // KPI cards
+            _get("KPISummary").then(function (d) {
+                var r = d[0] || {};
+                oModel.setProperty("/kpi", {
+                    uploaded  : String(r.totalUploaded  || 0),
+                    approved  : String(r.totalApproved  || 0),
+                    rejected  : String(r.totalRejected  || 0)
+                });
             });
-            this.getView().setModel(oModel);
-        },
 
-        _configureCharts: function() {
-            this._setupModuleChart();
-            this._setupPieChart();
-            this._setupColumnChart("monthChart",   ["#2196a8", "#4db8a4", "#7ec8c8"]);
-            this._setupColumnChart("quarterChart",  ["#1f3d7a", "#4db8a4", "#7ec8c8"]);
-            this._setupColumnChart("yearChart",     ["#4db8a4", "#2196a8", "#1f3d7a"]);
-        },
+            // Onboarded KPI
+            _get("OnboardedCount").then(function (d) {
+                oModel.setProperty("/kpi/onboarded", String((d[0] || {}).totalOnboarded || 0));
+            });
 
-        _setupModuleChart: function() {
-            var oChart = this.byId("moduleBarChart");
-            if (!oChart) {
-                console.warn("moduleBarChart not found");
-                return;
-            }
-            oChart.destroyFeeds();
+            // Stacked bar + Donut
+            _get("ModuleStats").then(function (d) {
+                var moduleData = d.map(function (r) {
+                    return { module: r.moduleName, approved: r.approved || 0, pending: r.pending || 0, uploaded: r.uploaded || 0 };
+                });
+                var total = moduleData.reduce(function (s, r) { return s + r.approved + r.pending + r.uploaded; }, 0);
+                oModel.setProperty("/moduleData", moduleData);
+                oModel.setProperty("/pieData", moduleData.map(function (r) {
+                    var cnt = r.approved + r.pending + r.uploaded;
+                    return { module: r.module, count: total ? +((cnt / total * 100).toFixed(2)) : 0 };
+                }));
+            });
 
-            // Use stacked_column for stacked bar effect
-            oChart.setVizType("stacked_column");
-            oChart.setWidth("100%");
-
-            oChart.setVizProperties({
-                legend:       { visible: false },
-                categoryAxis: {
-                    title: { visible: false },
-                    label: { truncatedLabelRatio: 0.15 }
-                },
-                valueAxis:    { title: { visible: false } },
-                title:        { visible: false },
-                plotArea: {
-                    colorPalette: ["#1f3d7a", "#4db8a4", "#7ec8a0"],
-                    dataLabel: {
-                        visible: true,
-                        formatString: "#",
-                        hideWhenOverlap: true
-                    },
-                    gap: 0.4
+            // Top 3 usage charts
+            _get("UsageStats").then(function (d) {
+                function top3(period) {
+                    return d.filter(function (r) { return r.period === period; })
+                             .sort(function (a, b) { return b.usageCount - a.usageCount; })
+                             .slice(0, 3)
+                             .map(function (r) { return { template: r.templateName, usage: r.usageCount }; });
                 }
+                oModel.setProperty("/topMonthData",   top3("MONTH"));
+                oModel.setProperty("/topQuarterData", top3("QUARTER"));
+                oModel.setProperty("/topYearData",    top3("YEAR"));
             });
 
-            oChart.addFeed(new FeedItem({ uid: "valueAxis",    type: "Measure",   values: ["Approved", "Pending", "Uploaded"] }));
-            oChart.addFeed(new FeedItem({ uid: "categoryAxis", type: "Dimension", values: ["Module"] }));
+            // Details table
+            _get("LoadDetails").then(function (d) {
+                oModel.setProperty("/tableData", d.map(function (r) {
+                    return {
+                        moduleName    : r.moduleName    || "",
+                        subModuleName : r.subModuleName || "",
+                        loadType      : r.loadType      || "",
+                        loadTemplate  : r.loadTemplate  || "",
+                        loadCount     : r.loadCount ? Number(r.loadCount).toLocaleString() : "0"
+                    };
+                }));
+            });
+
+            // Header date
+            oModel.setProperty("/createdDate", "CREATEDDAY: " + new Date().toDateString());
         },
 
-        _setupPieChart: function() {
-            var oChart = this.byId("pieChart");
-            if (!oChart) {
-                console.warn("pieChart not found");
-                return;
-            }
-            oChart.destroyFeeds();
-
-            oChart.setVizProperties({
-                legend:   { visible: false },
-                title:    { visible: false },
-                plotArea: {
-                    colorPalette: ["#2196a8", "#4db8a4", "#7ec8c8", "#1a5276", "#34495e"],
-                    dataLabel: { visible: true, type: "percentage" }
-                }
-            });
-
-            oChart.addFeed(new FeedItem({ uid: "size",  type: "Measure",   values: ["Count"] }));
-            oChart.addFeed(new FeedItem({ uid: "color", type: "Dimension", values: ["Module"] }));
+        // ── Chart config ──
+        _configureCharts: function () {
+            this._stackedBar();
+            this._donut();
+            this._column("monthChart",   ["#2196a8","#4db8a4","#7ec8c8"]);
+            this._column("quarterChart", ["#1f3d7a","#4db8a4","#7ec8c8"]);
+            this._column("yearChart",    ["#4db8a4","#2196a8","#1f3d7a"]);
         },
 
-        _setupColumnChart: function(sId, aColors) {
-            var oChart = this.byId(sId);
-            if (!oChart) {
-                console.warn(sId + " not found");
-                return;
-            }
-            oChart.destroyFeeds();
-            oChart.setVizType("column");
-            oChart.setWidth("100%");
-
-            oChart.setVizProperties({
-                legend:       { visible: false },
-                categoryAxis: { title: { visible: false } },
-                valueAxis:    { title: { visible: false } },
-                title:        { visible: false },
-                plotArea: {
-                    colorPalette: aColors,
-                    dataLabel: { visible: true }
-                }
+        _stackedBar: function () {
+            var c = this.byId("moduleBarChart"); if (!c) return;
+            c.destroyFeeds(); c.setVizType("stacked_column"); c.setWidth("100%");
+            c.setVizProperties({ legend: { visible: false }, title: { visible: false },
+                categoryAxis: { title: { visible: false } }, valueAxis: { title: { visible: false } },
+                plotArea: { colorPalette: ["#1f3d7a","#4db8a4","#7ec8a0"],
+                            dataLabel: { visible: true, hideWhenOverlap: true }, gap: 0.4 }
             });
+            c.addFeed(new FeedItem({ uid: "valueAxis",    type: "Measure",   values: ["Approved","Pending","Uploaded"] }));
+            c.addFeed(new FeedItem({ uid: "categoryAxis", type: "Dimension", values: ["Module"] }));
+        },
 
-            oChart.addFeed(new FeedItem({ uid: "valueAxis",    type: "Measure",   values: ["Usage"] }));
-            oChart.addFeed(new FeedItem({ uid: "categoryAxis", type: "Dimension", values: ["Template"] }));
+        _donut: function () {
+            var c = this.byId("pieChart"); if (!c) return;
+            c.destroyFeeds();
+            c.setVizProperties({ legend: { visible: false }, title: { visible: false },
+                plotArea: { colorPalette: ["#2196a8","#4db8a4","#7ec8c8","#1a5276","#34495e"],
+                            dataLabel: { visible: true, type: "percentage" } }
+            });
+            c.addFeed(new FeedItem({ uid: "size",  type: "Measure",   values: ["Count"] }));
+            c.addFeed(new FeedItem({ uid: "color", type: "Dimension", values: ["Module"] }));
+        },
+
+        _column: function (sId, aColors) {
+            var c = this.byId(sId); if (!c) return;
+            c.destroyFeeds(); c.setVizType("column"); c.setWidth("100%");
+            c.setVizProperties({ legend: { visible: false }, title: { visible: false },
+                categoryAxis: { title: { visible: false } }, valueAxis: { title: { visible: false } },
+                plotArea: { colorPalette: aColors, dataLabel: { visible: true } }
+            });
+            c.addFeed(new FeedItem({ uid: "valueAxis",    type: "Measure",   values: ["Usage"] }));
+            c.addFeed(new FeedItem({ uid: "categoryAxis", type: "Dimension", values: ["Template"] }));
         }
 
     });
