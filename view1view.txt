@@ -82,14 +82,23 @@
                                         height="255px" width="100%"
                                         vizType="stacked_column">
                                         <viz:dataset>
-                                            <vizData:FlattenedDataset data="{/moduleData}">
+                                            <vizData:FlattenedDataset
+                                                data="{path: '/moduleData'}">
                                                 <vizData:dimensions>
-                                                    <vizData:DimensionDefinition name="Module" value="{module}"/>
+                                                    <vizData:DimensionDefinition
+                                                        name="Module"
+                                                        value="{path: 'module'}"/>
                                                 </vizData:dimensions>
                                                 <vizData:measures>
-                                                    <vizData:MeasureDefinition name="Approved" value="{approved}"/>
-                                                    <vizData:MeasureDefinition name="Pending"  value="{pending}"/>
-                                                    <vizData:MeasureDefinition name="Uploaded" value="{uploaded}"/>
+                                                    <vizData:MeasureDefinition
+                                                        name="Approved"
+                                                        value="{path: 'approved'}"/>
+                                                    <vizData:MeasureDefinition
+                                                        name="Pending"
+                                                        value="{path: 'pending'}"/>
+                                                    <vizData:MeasureDefinition
+                                                        name="Uploaded"
+                                                        value="{path: 'uploaded'}"/>
                                                 </vizData:measures>
                                             </vizData:FlattenedDataset>
                                         </viz:dataset>
@@ -128,12 +137,17 @@
                                         height="195px" width="100%"
                                         vizType="donut">
                                         <viz:dataset>
-                                            <vizData:FlattenedDataset data="{/pieData}">
+                                            <vizData:FlattenedDataset
+                                                data="{path: '/pieData'}">
                                                 <vizData:dimensions>
-                                                    <vizData:DimensionDefinition name="Module" value="{module}"/>
+                                                    <vizData:DimensionDefinition
+                                                        name="Module"
+                                                        value="{path: 'module'}"/>
                                                 </vizData:dimensions>
                                                 <vizData:measures>
-                                                    <vizData:MeasureDefinition name="Count" value="{count}"/>
+                                                    <vizData:MeasureDefinition
+                                                        name="Count"
+                                                        value="{path: 'count'}"/>
                                                 </vizData:measures>
                                             </vizData:FlattenedDataset>
                                         </viz:dataset>
@@ -158,12 +172,17 @@
                                         height="210px" width="100%"
                                         vizType="column">
                                         <viz:dataset>
-                                            <vizData:FlattenedDataset data="{/topMonthData}">
+                                            <vizData:FlattenedDataset
+                                                data="{path: '/topMonthData'}">
                                                 <vizData:dimensions>
-                                                    <vizData:DimensionDefinition name="Template" value="{template}"/>
+                                                    <vizData:DimensionDefinition
+                                                        name="Template"
+                                                        value="{path: 'template'}"/>
                                                 </vizData:dimensions>
                                                 <vizData:measures>
-                                                    <vizData:MeasureDefinition name="Usage" value="{usage}"/>
+                                                    <vizData:MeasureDefinition
+                                                        name="Usage"
+                                                        value="{path: 'usage'}"/>
                                                 </vizData:measures>
                                             </vizData:FlattenedDataset>
                                         </viz:dataset>
@@ -188,12 +207,17 @@
                                         height="210px" width="100%"
                                         vizType="column">
                                         <viz:dataset>
-                                            <vizData:FlattenedDataset data="{/topQuarterData}">
+                                            <vizData:FlattenedDataset
+                                                data="{path: '/topQuarterData'}">
                                                 <vizData:dimensions>
-                                                    <vizData:DimensionDefinition name="Template" value="{template}"/>
+                                                    <vizData:DimensionDefinition
+                                                        name="Template"
+                                                        value="{path: 'template'}"/>
                                                 </vizData:dimensions>
                                                 <vizData:measures>
-                                                    <vizData:MeasureDefinition name="Usage" value="{usage}"/>
+                                                    <vizData:MeasureDefinition
+                                                        name="Usage"
+                                                        value="{path: 'usage'}"/>
                                                 </vizData:measures>
                                             </vizData:FlattenedDataset>
                                         </viz:dataset>
@@ -218,12 +242,17 @@
                                         height="210px" width="100%"
                                         vizType="column">
                                         <viz:dataset>
-                                            <vizData:FlattenedDataset data="{/topYearData}">
+                                            <vizData:FlattenedDataset
+                                                data="{path: '/topYearData'}">
                                                 <vizData:dimensions>
-                                                    <vizData:DimensionDefinition name="Template" value="{template}"/>
+                                                    <vizData:DimensionDefinition
+                                                        name="Template"
+                                                        value="{path: 'template'}"/>
                                                 </vizData:dimensions>
                                                 <vizData:measures>
-                                                    <vizData:MeasureDefinition name="Usage" value="{usage}"/>
+                                                    <vizData:MeasureDefinition
+                                                        name="Usage"
+                                                        value="{path: 'usage'}"/>
                                                 </vizData:measures>
                                             </vizData:FlattenedDataset>
                                         </viz:dataset>
@@ -241,7 +270,7 @@
                     <!-- MFU Details Table -->
                     <VBox class="panelBox">
                         <Text text="MFU Details" class="panelTitlePad"/>
-                        <Table id="mfuTable" items="{/tableData}" class="mfuTable"
+                        <Table id="mfuTable" items="{path: '/tableData'}" class="mfuTable"
                                noDataText="No data available" sticky="ColumnHeaders">
                             <columns>
                                 <Column><Text text="MODULE NAME"/></Column>
@@ -253,11 +282,11 @@
                             <items>
                                 <ColumnListItem>
                                     <cells>
-                                        <Text text="{moduleName}"/>
-                                        <Text text="{subModuleName}"/>
-                                        <Text text="{loadType}"/>
-                                        <Text text="{loadTemplate}"/>
-                                        <Text text="{loadCount}" class="loadCount"/>
+                                        <Text text="{path: 'moduleName'}"/>
+                                        <Text text="{path: 'subModuleName'}"/>
+                                        <Text text="{path: 'loadType'}"/>
+                                        <Text text="{path: 'loadTemplate'}"/>
+                                        <Text text="{path: 'loadCount'}" class="loadCount"/>
                                     </cells>
                                 </ColumnListItem>
                             </items>
