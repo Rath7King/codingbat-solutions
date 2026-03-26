@@ -7,16 +7,18 @@
     background-color: #eef1f5 !important;
 }
 
-/* ── Aspire label — same blue as Fin ── */
-.aspireLabel .sapMText, .aspireLabel.sapMText {
+/* ── Aspire label ── */
+.aspireLabel .sapMText,
+.aspireLabel.sapMText {
     font-size: 0.72rem !important;
-    color: #1565C0 !important;
+    color: #888 !important;
     text-transform: uppercase;
     letter-spacing: 0.05em;
 }
 
 /* ── Fin = Blue ── */
-.brandFin .sapMText, .brandFin.sapMText {
+.brandFin .sapMText,
+.brandFin.sapMText {
     font-size: 2rem !important;
     font-weight: 800 !important;
     color: #1565C0 !important;
@@ -24,72 +26,91 @@
 }
 
 /* ── Sight = Green ── */
-.brandSight .sapMText, .brandSight.sapMText {
+.brandSight .sapMText,
+.brandSight.sapMText {
     font-size: 2rem !important;
     font-weight: 800 !important;
     color: #43A047 !important;
     line-height: 1 !important;
 }
 
-/* ── Full-width light-green banner, black text ── */
-.dashboardBanner, .dashboardBanner.sapMHBox {
-    background: #c8e6c9 !important;
+/* ── Full-width green banner ── */
+.dashboardBanner,
+.dashboardBanner.sapMHBox {
+    background: #4CAF50 !important;
     padding: 10px 20px !important;
     width: 100% !important;
     margin-left: 0 !important;
     margin-right: 0 !important;
 }
-.dashboardBannerText .sapMText, .dashboardBannerText.sapMText {
-    color: #000000 !important;
+.dashboardBannerText .sapMText,
+.dashboardBannerText.sapMText {
+    color: #ffffff !important;
     font-size: 1.1rem !important;
     font-weight: 700 !important;
 }
 
 /* ── Date text ── */
-.dateText .sapMText, .dateText.sapMText {
+.dateText .sapMText,
+.dateText.sapMText {
     font-size: 0.68rem !important;
     color: #555 !important;
 }
 
-/* ── Row 1: 40/60 split ── */
-.row1Wrap, .row1Wrap.sapMHBox {
+/* ── Row 1 outer HBox — 40/60 split ── */
+.row1Wrap,
+.row1Wrap.sapMHBox {
+    display: flex !important;
+    align-items: stretch !important;
     width: 100% !important;
-    align-items: stretch !important;
+    gap: 12px !important;
 }
 
-/* ── KPI half (40%) ── */
-.kpiHalf, .kpiHalf.sapMVBox {
+/* ── KPI half — exactly 40% ── */
+.kpiHalf,
+.kpiHalf.sapMVBox {
     width: 40% !important;
-    flex: 0 0 40% !important;
+    flex-shrink: 0 !important;
+    flex-grow: 0 !important;
+    flex-basis: 40% !important;
     max-width: 40% !important;
-    padding-right: 8px !important;
-    box-sizing: border-box !important;
 }
 
-/* ── KPI row stretches to fill ── */
-.kpiRow, .kpiRow.sapMHBox {
-    flex: 1 1 auto !important;
-    align-items: stretch !important;
+/* ── Module half — fills remaining 60% ── */
+.moduleHalf,
+.moduleHalf.sapMVBox {
+    width: 60% !important;
+    flex-shrink: 0 !important;
+    flex-grow: 0 !important;
+    flex-basis: 60% !important;
+    max-width: 60% !important;
 }
 
-/* ── KPI Card — no blue left border ── */
-.kpiCard, .kpiCard.sapMVBox {
-    flex: 1 1 0 !important;
-    padding: 14px 14px !important;
+/* ── KPI Grid ── */
+.kpiGrid,
+.kpiGrid.sapUiLayoutGrid {
+    width: 100% !important;
+    height: 100% !important;
+}
+.kpiGrid .sapUiLayoutGrid > .sapUiLayoutGridC {
+    padding: 4px !important;
+}
+
+/* ── KPI Card ── */
+.kpiCard,
+.kpiCard.sapMVBox {
+    height: 100% !important;
+    padding: 12px 14px !important;
     background: #ffffff !important;
     border: 1px solid #e0e0e0 !important;
-    border-radius: 4px !important;
-    box-sizing: border-box !important;
-}
-.kpiCardRight, .kpiCardRight.sapMVBox {
-    margin-right: 4px !important;
-}
-.kpiCardBottom, .kpiCardBottom.sapMVBox {
-    margin-bottom: 4px !important;
+    border-left: 4px solid #1565C0 !important;
+    border-radius: 6px !important;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06) !important;
 }
 
 /* ── KPI label ── */
-.kpiLabel .sapMText, .kpiLabel.sapMText {
+.kpiLabel .sapMText,
+.kpiLabel.sapMText {
     font-size: 0.75rem !important;
     font-weight: 600 !important;
     color: #444 !important;
@@ -97,7 +118,8 @@
 }
 
 /* ── KPI value — green ── */
-.kpiValue .sapMText, .kpiValue.sapMText {
+.kpiValue .sapMText,
+.kpiValue.sapMText {
     font-size: 2rem !important;
     font-weight: 800 !important;
     color: #4CAF50 !important;
@@ -107,26 +129,23 @@
 }
 
 /* ── KPI sub label ── */
-.kpiSubLabel .sapMText, .kpiSubLabel.sapMText {
+.kpiSubLabel .sapMText,
+.kpiSubLabel.sapMText {
     font-size: 0.6rem !important;
     color: #aaa !important;
     letter-spacing: 0.05em;
     margin-top: 2px !important;
 }
 
-/* ── Module half (60%) ── */
-.moduleHalf, .moduleHalf.sapMVBox {
-    width: 60% !important;
-    flex: 0 0 60% !important;
-    max-width: 60% !important;
-}
-
-/* ── Module panel ── */
-.modulePanel, .modulePanel.sapMPanel {
+/* ── Module panel — fills full height of its half ── */
+.modulePanel,
+.modulePanel.sapMPanel {
+    flex: 1 1 auto !important;
     height: 100% !important;
     background: #ffffff !important;
     border: 1px solid #e4e4e4 !important;
     border-radius: 6px !important;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.05) !important;
     width: 100% !important;
 }
 .modulePanel > .sapMPanelHdr,
@@ -137,60 +156,16 @@
     color: #333 !important;
     background: #ffffff !important;
     border-bottom: 1px solid #f0f0f0 !important;
-}
-
-/* ── Donut half (40%) ── */
-.donutHalf, .donutHalf.sapMVBox {
-    width: 40% !important;
-    flex: 0 0 40% !important;
-    max-width: 40% !important;
-    padding-right: 8px !important;
-    box-sizing: border-box !important;
-}
-
-/* ── Usage charts container (60%) ── */
-.usageChartsHalf, .usageChartsHalf.sapMHBox {
-    width: 60% !important;
-    flex: 0 0 60% !important;
-    max-width: 60% !important;
-    align-items: stretch !important;
-}
-
-/* ── Each usage chart cell (33.33% of 60%) ── */
-.usageChartCell, .usageChartCell.sapMVBox {
-    flex: 1 1 0 !important;
-    min-width: 0 !important;
-}
-.usageChartCellRight, .usageChartCellRight.sapMVBox {
-    margin-right: 6px !important;
-}
-
-/* ── Usage panel fills height ── */
-.usagePanel, .usagePanel.sapMPanel {
-    height: 100% !important;
-}
-
-/* ── Usage panel toolbar — wrapping title ── */
-.usagePanelToolbar, .usagePanelToolbar.sapMTB {
-    height: auto !important;
-    min-height: 44px !important;
-    padding: 4px 14px !important;
-    background: #ffffff !important;
-    border-bottom: 1px solid #f0f0f0 !important;
-}
-.usagePanelTitle .sapMTitle, .usagePanelTitle.sapMTitle {
-    font-size: 0.73rem !important;
-    font-weight: 600 !important;
-    color: #333 !important;
-    white-space: normal !important;
-    line-height: 1.3 !important;
+    border-radius: 6px 6px 0 0 !important;
 }
 
 /* ── Generic chart panel ── */
-.chartPanel, .chartPanel.sapMPanel {
+.chartPanel,
+.chartPanel.sapMPanel {
     background: #ffffff !important;
     border: 1px solid #e4e4e4 !important;
     border-radius: 6px !important;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.05) !important;
 }
 .chartPanel > .sapMPanelHdr,
 .chartPanel.sapMPanel > .sapMPanelHdr {
@@ -200,21 +175,31 @@
     color: #333 !important;
     background: #ffffff !important;
     border-bottom: 1px solid #f0f0f0 !important;
+    border-radius: 6px 6px 0 0 !important;
 }
 
 /* ── Legend ── */
-.legendText .sapMText, .legendText.sapMText {
+.legendText .sapMText,
+.legendText.sapMText {
     font-size: 0.68rem !important;
     color: #555 !important;
 }
-.legendIconApproved, .legendIconApproved.sapUiIcon { font-size: 0.65rem !important; color: #1f3d7a !important; }
-.legendIconPending,  .legendIconPending.sapUiIcon  { font-size: 0.65rem !important; color: #4db8a4 !important; }
-.legendIconUploaded, .legendIconUploaded.sapUiIcon { font-size: 0.65rem !important; color: #7ec8a0 !important; }
-.legendESG,      .legendESG.sapUiIcon      { font-size: 0.65rem !important; color: #2196a8 !important; }
-.legendFINCOST,  .legendFINCOST.sapUiIcon  { font-size: 0.65rem !important; color: #4db8a4 !important; }
-.legendICON,     .legendICON.sapUiIcon     { font-size: 0.65rem !important; color: #7ec8c8 !important; }
-.legendNFRP,     .legendNFRP.sapUiIcon     { font-size: 0.65rem !important; color: #1a5276 !important; }
-.legendTREASURY, .legendTREASURY.sapUiIcon { font-size: 0.65rem !important; color: #34495e !important; }
+.legendIconApproved,
+.legendIconApproved.sapUiIcon { font-size: 0.65rem !important; color: #1f3d7a !important; }
+.legendIconPending,
+.legendIconPending.sapUiIcon  { font-size: 0.65rem !important; color: #4db8a4 !important; }
+.legendIconUploaded,
+.legendIconUploaded.sapUiIcon { font-size: 0.65rem !important; color: #7ec8a0 !important; }
+.legendESG,
+.legendESG.sapUiIcon          { font-size: 0.65rem !important; color: #2196a8 !important; }
+.legendFINCOST,
+.legendFINCOST.sapUiIcon      { font-size: 0.65rem !important; color: #4db8a4 !important; }
+.legendICON,
+.legendICON.sapUiIcon         { font-size: 0.65rem !important; color: #7ec8c8 !important; }
+.legendNFRP,
+.legendNFRP.sapUiIcon         { font-size: 0.65rem !important; color: #1a5276 !important; }
+.legendTREASURY,
+.legendTREASURY.sapUiIcon     { font-size: 0.65rem !important; color: #34495e !important; }
 
 /* ── MFU Details Table ── */
 .mfuTable .sapMListTblHeaderCell {
@@ -231,7 +216,8 @@
     font-size: 0.76rem !important;
     color: #333 !important;
 }
-.loadCount .sapMText, .loadCount.sapMText {
+.loadCount .sapMText,
+.loadCount.sapMText {
     font-weight: 500 !important;
     color: #1565C0 !important;
 }
