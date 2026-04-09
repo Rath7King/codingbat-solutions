@@ -1,0 +1,599 @@
+base
+
+sap.ui.define([
+    "sap/ui/core/mvc/Controller"
+], function (Controller) {
+    "use strict";
+
+    var BASE_URL = "/api/cib/FinancialDashboard";
+
+    return Controller.extend("project1.controller.BaseController", {
+
+        // ── OData fetch ───────────────────────────────────────
+        _oDataFetch: function (sFilter, sOrderBy) {
+            var sUrl = BASE_URL
+                + "?$filter=" + encodeURIComponent(sFilter)
+                + (sOrderBy ? "&$orderby=" + encodeURIComponent(sOrderBy) : "");
+
+            return fetch(sUrl, { headers: { "Accept": "application/json" } })
+                .then(function (r) {
+                    if (!r.ok) throw new Error("OData " + r.status + ": " + r.statusText);
+                    return r.json();
+                })
+                .then(function (d) { return d.value || []; });
+        },
+
+        // ── Build $filter from current state ─────────────────
+        _getStateFilter: function (sRecordType) {
+            var s = this._getStore().getProperty("/state");
+            return [
+                "recordType eq '"   + sRecordType  + "'",
+                "topGroup eq '"     + s.selectedTop + "'",
+                "pageView eq '"     + s.selectedSub + "'",
+                "displayUnit eq '"  + s.unit        + "'",
+                "currencyType eq '" + s.currency    + "'"
+            ].join(" and ");
+        },
+
+        // ── Set data-activeItem on a toggle control ───────────
+        _setToggleActive: function (sId, bActive) {
+            var oCtrl = this.byId(sId);
+            if (!oCtrl) return;
+            var oDom = oCtrl.getDomRef();
+            if (oDom) oDom.setAttribute("data-activeItem", bActive ? "true" : "false");
+        },
+
+        // ── Apply a map of { id: boolean } to toggles ────────
+        _applyToggles: function (oMap) {
+            Object.keys(oMap).forEach(function (sId) {
+                this._setToggleActive(sId, oMap[sId]);
+            }, this);
+        },
+
+        // ════════════════════════════════════════════════════
+        //  SHARED STORE MODEL HELPERS
+        //
+        //  THE FIX IS HERE.
+        //
+        //  Before the fix:
+        //    Every controller did: this.getView().setModel(oStore, "store")
+        //    This sets the model on the VIEW. Each view (View1, Trends)
+        //    got its OWN separate store model. So:
+        //      - View1's store had selectedTop = "WRB"
+        //      - Trends's store had selectedTop = "Group" (reset on init)
+        //    They never shared state. Navigating between pages lost the selection.
+        //
+        //  After the fix:
+        //    We use: this.getOwnerComponent().setModel(oStore, "store")
+        //    This sets the model on the COMPONENT — the single shared parent
+        //    of every view in the app. Both View1 and Trends read from and
+        //    write to the exact same model object.
+        //    When View1 sets selectedTop = "WRB", Trends sees "WRB".
+        //    When Trends sets selectedTop = "CIB", View1 sees "CIB".
+        //    State is preserved across every navigation.
+        //
+        //  Why this.getView().getModel("store") still works:
+        //    SAP UI5 model propagation — when a view looks for a named model
+        //    it first checks the view itself, then walks UP to the component.
+        //    Since we no longer set the model on the view, the lookup reaches
+        //    the component and finds the shared model. No change needed in
+        //    any XML binding — {store>/state/selectedTop} still works.
+        // ════════════════════════════════════════════════════
+
+        // Returns the shared store model (creates it once if needed)
+        _getStore: function () {
+            var oComponent = this.getOwnerComponent();
+            var oStore     = oComponent.getModel("store");
+            if (!oStore) {
+                // First ever call — create the model on the component
+                oStore = new sap.ui.model.json.JSONModel({
+                    state: {
+                        selectedTop: "Group",
+                        selectedSub: "Overview",
+                        unit:        "$m",
+                        currency:    "RFX",
+                        period:      "quarterly"
+                    }
+                });
+                // Set on COMPONENT so ALL views share the exact same instance
+                oComponent.setModel(oStore, "store");
+            }
+            return oStore;
+        },
+
+        // Convenience: read the full state object
+        _getState: function () {
+            return this._getStore().getProperty("/state");
+        }
+    });
+});
+
+tdenda
+sap.ui.define([
+    "project1/controller/BaseController",
+    "sap/ui/model/json/JSONModel"
+], function (BaseController, JSONModel) {
+    "use strict";
+
+    var BAR_METRICS  = ["NII","NFI","TotalIncome","Cost","Impairments","OperatingProfit","FundedAssets","FundedLiabilities","RWA"];
+    var LINE_METRICS = ["RoTE","JAWS","CIR"];
+    var ALL_METRICS  = BAR_METRICS.concat(LINE_METRICS);
+    var SERIES       = ["pyActuals","actuals2026","outlook2026","br2026"];
+    var Q_CATS       = ["Q1'25","Q2'25","Q3'25","Q4'25","Q1'26","Q2'26","Q3'26","Q4'26","FY'25","FY'26"];
+    var H_CATS       = ["H1'25","H2'25","H1'26","H2'26","FY'25","FY'26"];
+
+    return BaseController.extend("project1.controller.Trends", {
+
+        onInit: function () {
+            this.getOwnerComponent().getRouter()
+                .getRoute("trends")
+                .attachPatternMatched(this._onTrendsMatched, this);
+        },
+
+        _onTrendsMatched: function () {
+            var oView  = this.getView();
+
+            // _getStore() returns the COMPONENT-level shared model.
+            // If View1 already created it (user navigated from Overview),
+            // this returns the exact same object — selectedTop is preserved.
+            // If this is the first page ever opened, it creates it fresh.
+            var oStore = this._getStore();
+
+            // Only update selectedSub to show "Trends" in the title.
+            // selectedTop is NOT touched — it keeps whatever Group/CIB/WRB
+            // the user last selected on either page.
+            oStore.setProperty("/state/selectedSub", "Trends");
+
+            if (!oStore.getProperty("/state/period")) {
+                oStore.setProperty("/state/period", "quarterly");
+            }
+
+            // Attach the shared model to this view so XML bindings work
+            if (!oView.getModel("store")) {
+                oView.setModel(oStore, "store");
+            }
+
+            this._refreshNavToggles();
+            this._loadTrendsData();
+        },
+
+        // ── Nav toggles ───────────────────────────────────────
+        _refreshNavToggles: function () {
+            var s = this._getState();
+            this._applyToggles({
+                trends_groupToggle:    s.selectedTop === "Group",
+                trends_CIBtoggle:      s.selectedTop === "CIB",
+                trends_WRBtoggle:      s.selectedTop === "WRB",
+                trends_overviewToggle: s.selectedSub === "Overview",
+                trends_trendsToggle:   s.selectedSub === "Trends",
+                trends_btnM:           s.unit        === "$m",
+                trends_btnBn:          s.unit        === "$bn",
+                trends_btnRFX:         s.currency    === "RFX",
+                trends_btnCFX:         s.currency    === "CFX",
+                tr_btnM:               s.period      === "monthly",
+                tr_btnBn:              s.period      === "quarterly",
+                trtnBn:                s.period      === "halfYearly"
+            });
+        },
+
+        // ── Nav handlers ──────────────────────────────────────
+        onPageSelect: function (oEvent) {
+            this._getStore().setProperty("/state/selectedTop", oEvent.getSource().getText());
+            this._refreshNavToggles();
+            this._disposeAllCharts();
+            this._loadTrendsData();
+        },
+
+        onSubPageSelect: function (oEvent) {
+            this._getStore().setProperty("/state/selectedSub", oEvent.getSource().getText());
+            this._refreshNavToggles();
+        },
+
+        oncustomToggleClick: function (oEvent) {
+            var sText  = oEvent.getSource().getText();
+            var oStore = this._getStore();
+            var bPeriod = sText === "Monthly" || sText === "Quarterly" || sText === "Half Yearly";
+
+            if (sText === "$m"  || sText === "$bn")  { oStore.setProperty("/state/unit",     sText); this._loadTrendsData(); }
+            if (sText === "RFX" || sText === "CFX")  { oStore.setProperty("/state/currency", sText); this._loadTrendsData(); }
+            if (sText === "Monthly")     oStore.setProperty("/state/period", "monthly");
+            if (sText === "Quarterly")   oStore.setProperty("/state/period", "quarterly");
+            if (sText === "Half Yearly") oStore.setProperty("/state/period", "halfYearly");
+
+            this._refreshNavToggles();
+            if (bPeriod) this._renderAllCharts();
+        },
+
+        onOverviewNavigate: function () {
+            // Update the shared model before navigating so View1 sees
+            // the correct selectedTop immediately — no reset, no new model.
+            this._getStore().setProperty("/state/selectedSub", "Overview");
+            this._disposeAllCharts();
+            this.getOwnerComponent().getRouter().navTo("overview");
+        },
+
+        // ── Load from HANA ────────────────────────────────────
+        _loadTrendsData: function () {
+            var that = this;
+            this._oDataFetch(this._getTrendsFilter(), "trendMetricName asc,trendPeriodIndex asc")
+                .then(function (aRows) {
+                    that._data = that._buildPeriodData(aRows);
+                    setTimeout(function () { that._loadEChartsAndRender(); }, 150);
+                })
+                .catch(function (e) { console.error("[Trends]", e); });
+        },
+
+        _getTrendsFilter: function () {
+            var s = this._getState();
+            return "recordType eq 'TRENDS' and topGroup eq '" + s.selectedTop +
+                   "' and pageView eq 'Trends' and displayUnit eq '" + s.unit +
+                   "' and currencyType eq '" + s.currency + "'";
+        },
+
+        // ── Build { monthly, quarterly, halfYearly } ──────────
+        _buildPeriodData: function (aRows) {
+            var oMonthly = { categories: [] };
+            ALL_METRICS.forEach(function (m) {
+                oMonthly[m] = {};
+                SERIES.forEach(function (s) { oMonthly[m][s] = []; });
+            });
+
+            var oQ = { categories: Q_CATS };
+            ALL_METRICS.forEach(function (m) {
+                oQ[m] = {};
+                SERIES.forEach(function (s) { oQ[m][s] = new Array(10).fill(null); });
+            });
+            aRows.forEach(function (r) {
+                var aS = oQ[r.trendMetricName] && oQ[r.trendMetricName][r.trendSeriesType];
+                if (aS && r.trendPeriodIndex >= 0 && r.trendPeriodIndex < 10) {
+                    aS[r.trendPeriodIndex] = r.trendDataValue;
+                }
+            });
+
+            var that = this;
+            var oH = { categories: H_CATS };
+            ALL_METRICS.forEach(function (m) {
+                var bLine = LINE_METRICS.indexOf(m) !== -1;
+                var q = oQ[m];
+                oH[m] = {};
+                SERIES.forEach(function (s) {
+                    var a = q[s];
+                    oH[m][s] = [
+                        that._combine(a[0], a[1], bLine),
+                        that._combine(a[2], a[3], bLine),
+                        that._combine(a[4], a[5], bLine),
+                        that._combine(a[6], a[7], bLine),
+                        a[8], a[9]
+                    ];
+                });
+            });
+
+            return { monthly: oMonthly, quarterly: oQ, halfYearly: oH };
+        },
+
+        _combine: function (a, b, bAvg) {
+            if (a === null && b === null) return null;
+            if (a === null) return b;
+            if (b === null) return a;
+            return bAvg ? +((a + b) / 2).toFixed(2) : a + b;
+        },
+
+        // ── ECharts ───────────────────────────────────────────
+        _loadEChartsAndRender: function () {
+            if (window.echarts) { this._renderAllCharts(); return; }
+            var s = document.createElement("script");
+            s.src = "https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js";
+            s.onload = this._renderAllCharts.bind(this);
+            document.head.appendChild(s);
+        },
+
+        _renderAllCharts: function () {
+            if (!this._data) return;
+            var s = this._getState().period || "quarterly";
+            var d = this._data[s];
+            if (!d) return;
+            var c = d.categories;
+            BAR_METRICS.forEach(function (m) { this._renderBarChart("chart" + m, c, d[m]); }, this);
+            LINE_METRICS.forEach(function (m) { this._renderLineChart("chart" + m, c, d[m]); }, this);
+        },
+
+        _getDomId:  function (id) { return this.getView().getId() + "--" + id; },
+
+        _initChart: function (id) {
+            var oDom = document.getElementById(this._getDomId(id));
+            if (!oDom) return null;
+            var oEx = window.echarts.getInstanceByDom(oDom);
+            if (oEx) oEx.dispose();
+            var oC = echarts.init(oDom);
+            window.addEventListener("resize", function () { oC.resize(); });
+            return oC;
+        },
+
+        _disposeAllCharts: function () {
+            var that = this;
+            ["chartNII","chartNFI","chartTotalIncome","chartCost","chartImpairments",
+             "chartOperatingProfit","chartFundedAssets","chartFundedLiabilities","chartRWA",
+             "chartRoTE","chartJAWS","chartCIR"].forEach(function (id) {
+                var d = document.getElementById(that._getDomId(id));
+                if (d) { var i = window.echarts.getInstanceByDom(d); if (i) i.dispose(); }
+            });
+        },
+
+        _noDataOption: function () {
+            return { title: { text: "No data available", left: "center", top: "center", textStyle: { fontSize: 11, color: "#999" } } };
+        },
+
+        _renderBarChart: function (id, cats, d) {
+            var oC = this._initChart(id);
+            if (!oC) return;
+            if (!d || !cats || !cats.length) { oC.setOption(this._noDataOption()); return; }
+
+            var DATA = cats.map(function (c, i) {
+                if (d.pyActuals[i]   != null) return { value: d.pyActuals[i],   itemStyle: { color: "#cccccc" }, seriesName: "PY Actuals" };
+                if (d.actuals2026[i] != null) return { value: d.actuals2026[i], itemStyle: { color: "#1a5fa8" }, seriesName: "2026 Actuals" };
+                if (d.outlook2026[i] != null) return { value: d.outlook2026[i], itemStyle: { color: "#5bc4f5" }, seriesName: "2026 Outlook" };
+                return { value: null, itemStyle: { color: "transparent" } };
+            });
+
+            oC.setOption({
+                animation: false,
+                grid: { left: 10, right: 10, top: 35, bottom: 45, containLabel: true },
+                legend: { show: false },
+                xAxis: { type: "category", data: cats, axisLine: { lineStyle: { color: "#ccc" } }, axisTick: { show: false }, axisLabel: { fontSize: 9, interval: 0, color: function (v) { return v === "" ? "transparent" : v.includes("'25") ? "#999" : "#333"; } } },
+                yAxis: { type: "value", axisLabel: { show: false }, splitLine: { show: false }, axisLine: { show: false }, axisTick: { show: false } },
+                tooltip: { trigger: "axis", formatter: function (p) { var x = p[0]; return x && x.value != null ? x.name + "<br/>" + x.marker + " " + (x.data.seriesName || "") + ": " + x.value : ""; }, textStyle: { fontSize: 10 } },
+                series: [
+                    { type: "bar", data: DATA, barCategoryGap: "40%", label: { show: true, position: "top", fontSize: 8, color: "#555", formatter: function (p) { return p.value != null ? p.value : ""; } } },
+                    { type: "line", data: d.br2026, showSymbol: true, symbol: "circle", symbolSize: 4, lineStyle: { color: "#27ae60", width: 2 }, itemStyle: { color: "#27ae60" }, connectNulls: false, label: { show: false } }
+                ]
+            });
+        },
+
+        _renderLineChart: function (id, cats, d) {
+            var oC = this._initChart(id);
+            if (!oC) return;
+            if (!d || !cats || !cats.length) { oC.setOption(this._noDataOption()); return; }
+
+            var fmt = function (p) { return p.value != null ? p.value : ""; };
+            var xCol = function (v) { return v.includes("'25") ? "#999" : "#333"; };
+
+            oC.setOption({
+                animation: false,
+                grid: { left: 10, right: 10, top: 35, bottom: 45, containLabel: true },
+                legend: { show: false },
+                xAxis: { type: "category", data: cats, axisLine: { lineStyle: { color: "#ccc" } }, axisTick: { show: false }, axisLabel: { fontSize: 9, interval: 0, color: xCol } },
+                yAxis: { type: "value", axisLabel: { show: false }, splitLine: { show: false }, axisLine: { show: false }, axisTick: { show: false } },
+                tooltip: { trigger: "axis", textStyle: { fontSize: 10 } },
+                series: [
+                    { name: "PY Actuals",   type: "line", data: d.pyActuals,   symbol: "circle", symbolSize: 4, lineStyle: { color: "#cccccc", width: 2 }, itemStyle: { color: "#cccccc" }, connectNulls: false, label: { show: true, fontSize: 8, color: "#999",   position: "bottom", formatter: fmt } },
+                    { name: "2026 Actuals", type: "line", data: d.actuals2026.map(function (v, i) { return v == null && d.outlook2026[i] != null ? d.outlook2026[i] : v; }), symbol: "circle", symbolSize: 4, lineStyle: { color: "#1a5fa8", width: 2 }, itemStyle: { color: "#1a5fa8" }, connectNulls: false, label: { show: true, fontSize: 8, color: "#1a5fa8", position: "bottom", formatter: fmt } },
+                    { name: "2026 BR",      type: "line", data: d.br2026,      symbol: "circle", symbolSize: 4, lineStyle: { color: "#27ae60", width: 2 }, itemStyle: { color: "#27ae60" }, connectNulls: false, label: { show: true, fontSize: 8, color: "#27ae60", position: "top",    formatter: fmt } }
+                ]
+            });
+        }
+    });
+});
+
+View
+
+sap.ui.define([
+    "project1/controller/BaseController",
+    "sap/ui/model/json/JSONModel",
+    "sap/ui/core/Fragment"
+], function (BaseController, JSONModel, Fragment) {
+    "use strict";
+
+    return BaseController.extend("project1.controller.View1", {
+
+        onInit: function () {
+            this.getOwnerComponent().getRouter()
+                .getRoute("overview")
+                .attachPatternMatched(this._onOverviewMatched, this);
+        },
+
+        _onOverviewMatched: function () {
+            var oView  = this.getView();
+
+            // _getStore() returns the COMPONENT-level shared model.
+            // It creates it once on the very first call (ever, for any page).
+            // On every subsequent call — from this page OR from Trends —
+            // it returns the exact same object. selectedTop is never reset.
+            var oStore = this._getStore();
+
+            // Only update selectedSub so we show "Overview" in the title.
+            // selectedTop stays whatever it was — Group, CIB, or WRB.
+            oStore.setProperty("/state/selectedSub", "Overview");
+
+            // The view inherits the component model automatically
+            // via UI5 model propagation — no need to setModel on the view.
+            // But we still call it so XML bindings using {store>...} work
+            // immediately on first render (belt-and-suspenders).
+            if (!oView.getModel("store")) {
+                oView.setModel(oStore, "store");
+            }
+
+            this._refreshNavToggles();
+            this._updateGrid();
+            this._loadChartAndTableData();
+        },
+
+        // ── Nav toggles ───────────────────────────────────────
+        _refreshNavToggles: function () {
+            var s = this._getState();
+            this._applyToggles({
+                groupToggle:    s.selectedTop === "Group",
+                CIBtoggle:      s.selectedTop === "CIB",
+                WRBtoggle:      s.selectedTop === "WRB",
+                overviewToggle: s.selectedSub === "Overview",
+                trendsToggle:   s.selectedSub === "Trends",
+                btnM:           s.unit        === "$m",
+                btnBn:          s.unit        === "$bn",
+                btnRFX:         s.currency    === "RFX",
+                btnCFX:         s.currency    === "CFX"
+            });
+        },
+
+        // ── Nav handlers ──────────────────────────────────────
+        onPageSelect: function (oEvent) {
+            this._getStore().setProperty("/state/selectedTop", oEvent.getSource().getText());
+            this._refreshNavToggles();
+            this._updateGrid();
+            this._loadChartAndTableData();
+        },
+
+        onSubPageSelect: function (oEvent) {
+            this._getStore().setProperty("/state/selectedSub", oEvent.getSource().getText());
+            this._refreshNavToggles();
+            this._updateGrid();
+        },
+
+        oncustomToggleClick: function (oEvent) {
+            var sText  = oEvent.getSource().getText();
+            var oStore = this._getStore();
+            if (sText === "$m" || sText === "$bn")   oStore.setProperty("/state/unit",     sText);
+            if (sText === "RFX" || sText === "CFX")  oStore.setProperty("/state/currency", sText);
+            this._refreshNavToggles();
+            this._updateGrid();
+            this._loadChartAndTableData();
+        },
+
+        onTrendsNavigate: function () {
+            // Update the shared model before navigating so Trends sees
+            // the correct selectedTop and selectedSub immediately
+            this._getStore().setProperty("/state/selectedSub", "Trends");
+            this._refreshNavToggles();
+            this.getOwnerComponent().getRouter().navTo("trends");
+        },
+
+        // ── Widget cards ──────────────────────────────────────
+        _updateGrid: function () {
+            var oContainer = this.byId("mainCardsContainer");
+            if (!oContainer) return;
+            oContainer.destroyItems();
+
+            this._oDataFetch(this._getStateFilter("WIDGET"), "kpiDisplayOrder asc")
+                .then(function (aRows) {
+                    if (!aRows.length) return;
+                    var aCards = aRows.map(function (r) {
+                        return {
+                            title: r.kpiTitle,          primaryValue: r.ytdActualValue,
+                            primaryPercent: r.ytdYoyPercent, isNegative: r.ytdIsNegative,
+                            dir1: r.ytdYoyArrowUp,      subLabel: r.ytdLabel,
+                            subLabelYOY: r.ytdYoyLabel,
+                            row1Label: r.vsBudgetLabel,  row1Value: r.vsBudgetValue,
+                            row2Label: r.pqtdLabel,      row2LabelYOY: r.pqtdYoyLabel,
+                            row2Value: r.pqtdValue,      row2Percent: r.pqtdYoyPercent,
+                            dir2: r.pqtdArrowUp,         row2IsNegative: r.pqtdIsNegative,
+                            row3Label: r.fyOutlookLabel, row3LabelYOY: r.fyOutlookYoyLabel,
+                            row3Value: r.fyOutlookValue, row3Percent: r.fyOutlookYoyPercent,
+                            dir3: r.fyOutlookArrowUp,    row3IsNegative: r.fyOutlookIsNegative
+                        };
+                    });
+
+                    if (!this._oKpiCardTemplate) {
+                        Fragment.load({ name: "project1.view.fragments.KpiCard", controller: this })
+                            .then(function (oFrag) {
+                                this._oKpiCardTemplate = oFrag;
+                                this._createCardsFromTemplate(aCards, oContainer);
+                            }.bind(this));
+                    } else {
+                        this._createCardsFromTemplate(aCards, oContainer);
+                    }
+                }.bind(this))
+                .catch(function (e) { console.error("[View1] Widgets:", e); });
+        },
+
+        _createCardsFromTemplate: function (aCards, oContainer) {
+            aCards.forEach(function (oData, i) {
+                var oCard = this._oKpiCardTemplate.clone("kpiCard_" + i);
+                oCard.setModel(new JSONModel(oData), "card");
+                oContainer.addItem(oCard);
+            }, this);
+        },
+
+        // ── Chart + Table ─────────────────────────────────────
+        _loadChartAndTableData: function () {
+            var that = this;
+            Promise.all([
+                this._oDataFetch(this._getStateFilter("CHART"), "productDisplayOrder asc"),
+                this._oDataFetch(this._getStateFilter("TABLE"), "clusterHierarchyLevel asc,parentClusterName asc,clusterName asc")
+            ]).then(function (aRes) {
+                var oChartModel = that.getView().getModel("chartStore") || new JSONModel();
+                oChartModel.setData({
+                    chartData: aRes[0].map(function (r) {
+                        return { product: r.productName, fyOutlook: r.productFyOutlook, ytd: r.productYtdActual, fyBudget: r.productFyBudget };
+                    }),
+                    tableData: that._buildTableTree(aRes[1])
+                });
+                that.getView().setModel(oChartModel, "chartStore");
+                that._chartData = oChartModel.getData().chartData;
+                setTimeout(function () { that._loadAndRenderECharts(); }, 150);
+            }).catch(function (e) { console.error("[View1] Chart/Table:", e); });
+        },
+
+        _buildTableTree: function (aRows) {
+            function mapRow(r) {
+                return { cluster: r.clusterName, ytd: r.clusterYtdActual, yoy: r.clusterYoyPercent, qtd: r.clusterQtdOutlook, fyOutlook: r.clusterFyOutlook };
+            }
+            var oRoot = aRows.find(function (r) { return r.clusterHierarchyLevel === 0; });
+            var aL1   = aRows.filter(function (r) { return r.clusterHierarchyLevel === 1; });
+            var aL2   = aRows.filter(function (r) { return r.clusterHierarchyLevel === 2; });
+            if (!oRoot) return [];
+
+            var oBuilt = mapRow(oRoot);
+            oBuilt.children = aL1.map(function (l1) {
+                var oNode = mapRow(l1);
+                var aKids = aL2.filter(function (l2) { return l2.parentClusterName === l1.clusterName; }).map(mapRow);
+                if (aKids.length) oNode.children = aKids;
+                return oNode;
+            });
+            return [oBuilt];
+        },
+
+        // ── ECharts ───────────────────────────────────────────
+        _loadAndRenderECharts: function () {
+            if (window.echarts) { this._renderChart(); return; }
+            var s = document.createElement("script");
+            s.src = "https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js";
+            s.onload = this._renderChart.bind(this);
+            document.head.appendChild(s);
+        },
+
+        _renderChart: function () {
+            var sDomId = this.getView().getId() + "--echartsContainer";
+            var oDom   = document.getElementById(sDomId);
+            if (!oDom || !this._chartData) return;
+
+            var oExist = window.echarts.getInstanceByDom(oDom);
+            if (oExist) oExist.dispose();
+
+            var oChart = echarts.init(oDom);
+            var aData  = this._chartData;
+
+            function fmt(v) {
+                if (v === 0) return "0";
+                var a = Math.abs(v), s = v < 0 ? "-" : "";
+                if (a >= 1e9) return s + (a / 1e9).toFixed(3).replace(/\.?0+$/, "") + "B";
+                if (a >= 1e6) return s + (a / 1e6).toFixed(3).replace(/\.?0+$/, "") + "M";
+                return s + a.toLocaleString();
+            }
+
+            oChart.setOption({
+                backgroundColor: "#ffffff",
+                legend: { top: 0, right: 0, itemWidth: 12, itemHeight: 12, textStyle: { fontSize: 11, color: "#333" }, data: [{ name: "FY Outlook", icon: "rect" }, { name: "YTD", icon: "rect" }, { name: "FY Budget", icon: "rect" }] },
+                grid:  { left: 60, right: 20, top: 40, bottom: 50 },
+                xAxis: { type: "category", data: aData.map(function (d) { return d.product; }), axisLine: { lineStyle: { color: "#ccc" } }, axisTick: { show: false }, axisLabel: { color: "#555", fontSize: 11 } },
+                yAxis: { type: "value", axisLabel: { color: "#555", fontSize: 10, formatter: fmt }, splitLine: { lineStyle: { color: "#f0f0f0" } }, axisLine: { show: false } },
+                tooltip: { trigger: "axis", formatter: function (p) { return p[0].axisValue + "<br/>" + p.map(function (x) { return x.marker + " " + x.seriesName + ": " + fmt(x.value); }).join("<br/>"); } },
+                series: [
+                    { name: "FY Outlook", type: "bar", data: aData.map(function (d) { return d.fyOutlook; }), barWidth: 50, z: 1, itemStyle: { color: "#1565c0" }, label: { show: true, position: "top", color: "#333", fontSize: 9, formatter: function (p) { return fmt(p.value); } } },
+                    { name: "YTD",        type: "bar", data: aData.map(function (d) { return d.ytd; }),       barWidth: 35, barGap: "-100%", z: 2, itemStyle: { color: "#1e88e5" }, label: { show: true, position: "top", color: "#333", fontSize: 9, formatter: function (p) { return fmt(p.value); } } },
+                    { name: "FY Budget",  type: "bar", data: aData.map(function (d) { return d.fyBudget; }),  barWidth: 20, barGap: "-100%", z: 3, itemStyle: { color: "#90caf9" }, label: { show: false } }
+                ]
+            });
+
+            window.addEventListener("resize", function () { oChart.resize(); });
+        }
+    });
+});
+
