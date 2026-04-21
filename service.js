@@ -3,25 +3,18 @@
 // ============================================================
 //  service.js
 //
-//  CHANGES IN THIS VERSION:
+//  Endpoints:
+//    POST /api/nrfp/getWidgetData       — all 12 KPI widgets, 1 call
+//    POST /api/nrfp/getWidgetNames      — widget name list (memory)
+//    POST /api/nrfp/getWidgetDataSingle — single widget (debug only)
 //
-//  1. COLUMN_MAP updated — all 12 widget column names updated
-//     to match the new queries (percentage variances, new column
-//     name patterns like VS_BUDGET_RFX_VARIANCE, PY_PQ_RFX_VARIANCE,
-//     YTD_ACTUAL_RFX_FPNA, VARIANCE_PYPQ_Actuals_RFX_FPNA etc.)
+//  Architecture:
+//  - hdb + generic-pool: 12 dedicated HANA connections, true parallelism
+//  - oQueryMap: all 12 SQL strings loaded at startup from ReportingMaster
+//  - buildJson + COLUMN_MAP: universal response builder, 0 if-blocks
+//  - getWidgetData: Promise.all fires all 12 queries simultaneously
 //
-//  2. Two new endpoints added for chart widgets:
-//       getIncomeByProduct  → returns array of rows by product
-//       getIncomeByCluster  → returns array of rows by cluster
-//     These queries are stored directly here (not in ReportingMaster)
-//     because they return MULTIPLE rows per call, unlike the 12 KPI
-//     widgets that each return exactly 1 row.
-//
-//  3. hdb + generic-pool for parallel HANA execution (unchanged)
-//  4. oQueryMap pre-load at startup (unchanged)
-//  5. getWidgetData — 1 call returns all 12 KPI widgets (unchanged)
-//
-//  INSTALL:
+//  INSTALL (run once):
 //    npm install generic-pool
 // ============================================================
 
@@ -50,6 +43,8 @@ if (oCreds.schema) {
 
 
 // ── Connection pool ────────────────────────────────────────────────────
+// min:12 — one permanent connection per widget so all 12 queries
+// run simultaneously inside HANA without queuing.
 var oFactory = {
     create: function () {
         return new Promise(function (resolve, reject) {
@@ -65,7 +60,8 @@ var oFactory = {
 };
 
 var oPool = genericPool.createPool(oFactory, {
-    min: 12, max: 20,
+    min:                  12,
+    max:                  20,
     acquireTimeoutMillis: 10000,
     idleTimeoutMillis:    60000,
     testOnBorrow:         true
@@ -77,6 +73,8 @@ oPool.on('factoryCreateError', function (err) {
 
 
 // ── runWithPool(sQuery) ────────────────────────────────────────────────
+// Borrows one connection, runs query, returns connection to pool.
+// try/finally guarantees release even on error.
 async function runWithPool(sQuery) {
     var oClient = await oPool.acquire();
     try {
@@ -108,20 +106,25 @@ function applyReporting(sQuery, sReporting) {
 
 
 // ============================================================
-//  COLUMN_MAP — UPDATED for new query column names
+//  COLUMN_MAP
 //
-//  All 12 KPI widgets now return percentage variances.
-//  Column names updated accordingly across all widgets.
+//  7 RFX column names per widget, matching the SELECT aliases
+//  in each widget's SQL query stored in ReportingMaster.
 //
-//  PATTERN: Store 7 RFX column names per widget.
 //  CFX auto-derived: colName.replace('_RFX', '_CFX')
-//  This works for all 12 widgets because HANA SQL uses that
-//  exact pattern in every query output column.
+//  Works for all 12 widgets — every SQL query follows this pattern.
+//
+//  Fields map to KpiCard display:
+//    [0] ytdActuals  — main large value at top of card
+//    [1] vsBudget    — sub-row (no YoY arrow)
+//    [2] pqActuals   — sub-row
+//    [3] fyOutlook   — sub-row
+//    [4] ytdYoy      — % shown next to main value
+//    [5] pqYoy       — % on PQ Actuals sub-row
+//    [6] fyYoy       — % on FY Outlook sub-row
 // ============================================================
 var COLUMN_MAP = {
 
-    // ── Income ────────────────────────────────────────────────────────────
-    // Variance columns now return % — column names unchanged
     'Income': [
         'YTD_ACTUALS_RFX_FPNA',
         'VS_BUDGET_RFX_FPNA',
@@ -132,8 +135,6 @@ var COLUMN_MAP = {
         'PY_YTD_ACTUALS_RFX_FPNA'
     ],
 
-    // ── Impairments ───────────────────────────────────────────────────────
-    // VS_BUDGET now _PCT suffix; YoY columns renamed to _VARIANCE pattern
     'Impairments': [
         'YTD_ACTUALS_RFX',
         'VS_BUDGET_RFX_PCT',
@@ -144,8 +145,6 @@ var COLUMN_MAP = {
         'FY_OUTLOOK_PY_RFX_VARIANCE'
     ],
 
-    // ── Underlying Profit ─────────────────────────────────────────────────
-    // All variance columns renamed to _VARIANCE suffix
     'Underlying Profit': [
         'YTD_ACTUALS_RFX',
         'VS_BUDGET_RFX_VARIANCE',
@@ -156,7 +155,6 @@ var COLUMN_MAP = {
         'FY_OUTLOOK_PY_RFX_VARIANCE'
     ],
 
-    // ── Funded Assets ─────────────────────────────────────────────────────
     'Funded Assets': [
         'YTD_ACTUALS_RFX',
         'VS_BUDGET_RFX_VARIANCE',
@@ -167,8 +165,6 @@ var COLUMN_MAP = {
         'FY_OUTLOOK_PY_RFX_VARIANCE'
     ],
 
-    // ── RoTE ──────────────────────────────────────────────────────────────
-    // All variance/YoY columns now have _VARIANCE suffix
     'RoTE': [
         'YTD_ACTUALS_RFX',
         'VS_BUDGET_RFX_VARIANCE',
@@ -179,9 +175,6 @@ var COLUMN_MAP = {
         'PYYTD_RFX_VARIANCE'
     ],
 
-    // ── Costs ─────────────────────────────────────────────────────────────
-    // CY_PQ → PQTD, PY_PQ → VARIANCE_PYPQ_Actuals, YTD_ACTUAL_PY → YTD_ACTUAL,
-    // YTD_ACTUAL_PY2 → YTD_ACTUAL_2 (all now percentages)
     'Costs': [
         'YTD_ACTUALS_RFX_FPNA',
         'VS_BUDGET_RFX_FPNA',
@@ -192,8 +185,6 @@ var COLUMN_MAP = {
         'YTD_ACTUAL_2_RFX_FPNA'
     ],
 
-    // ── NII ───────────────────────────────────────────────────────────────
-    // VARIANCE_YTD_ACTUAL renamed; PYPQ_ACTUALS renamed; PY_YTD same name
     'NII': [
         'YTD_ACTUALS_RFX_FPNA',
         'VS_BUDGET_RFX_FPNA',
@@ -204,8 +195,6 @@ var COLUMN_MAP = {
         'PY_YTD_ACTUALS_RFX_FPNA'
     ],
 
-    // ── First RWA ─────────────────────────────────────────────────────────
-    // Same pattern as Costs
     'First RWA': [
         'YTD_ACTUALS_RFX_FPNA',
         'VS_BUDGET_RFX_FPNA',
@@ -216,8 +205,6 @@ var COLUMN_MAP = {
         'YTD_ACTUAL_2_RFX_FPNA'
     ],
 
-    // ── JAWS ──────────────────────────────────────────────────────────────
-    // _PCT suffix added to all variance columns
     'JAWS': [
         'YTD_ACTUALS_RFX',
         'VS_BUDGET_RFX',
@@ -228,8 +215,6 @@ var COLUMN_MAP = {
         'VAR_PYYTD_PCT_RFX'
     ],
 
-    // ── CIR ───────────────────────────────────────────────────────────────
-    // Same pattern as JAWS (uses CFX_N/RFX_N from ALLRATIOS)
     'CIR': [
         'YTD_ACTUALS_RFX',
         'VS_BUDGET_RFX',
@@ -240,8 +225,6 @@ var COLUMN_MAP = {
         'VAR_PYYTD_PCT_RFX'
     ],
 
-    // ── Controllable Headcount ────────────────────────────────────────────
-    // _YOY_PCT suffix added to all variance columns
     'Controllable Headcount': [
         'YTD_ACTUALS_RFX',
         'VS_BUDGET_RFX',
@@ -252,7 +235,6 @@ var COLUMN_MAP = {
         'VAR_FY_VS_PY_YOY_PCT_RFX'
     ],
 
-    // ── Second RWA ────────────────────────────────────────────────────────
     'Second RWA': [
         'YTD_ACTUALS_RFX',
         'VS_BUDGET_RFX',
@@ -266,9 +248,9 @@ var COLUMN_MAP = {
 };
 
 
-// ── buildJson(sWidget, aRows) ──────────────────────────────────────────
-// Universal — 0 if blocks. Works for all 12 KPI widgets.
-// readGroup(suffix) reads 7 fields by replacing _RFX with suffix.
+// ── buildJson ──────────────────────────────────────────────────────────
+// Universal builder — works for all 12 KPI widgets, zero if-blocks.
+// readGroup(suffix) reads all 7 fields, replacing _RFX with suffix.
 function buildJson(sWidget, aRows) {
 
     if (!aRows || aRows.length === 0) {
@@ -277,6 +259,7 @@ function buildJson(sWidget, aRows) {
 
     var aCols = COLUMN_MAP[sWidget];
     if (!aCols) {
+        console.error('[buildJson] No COLUMN_MAP entry for: ' + sWidget);
         return { widget: sWidget, error: 'No column map for: ' + sWidget };
     }
 
@@ -308,88 +291,19 @@ function buildJson(sWidget, aRows) {
 
 
 // ============================================================
-//  CHART WIDGET QUERIES
-//
-//  These are NOT stored in ReportingMaster because they return
-//  multiple rows (one per product/cluster), unlike KPI widgets.
-//  Stored as constants here — change and restart cds watch.
-// ============================================================
-
-var INCOME_BY_PRODUCT_SQL = `WITH PERIODS AS (
-    SELECT DISTINCT E_PERIOD_DATE
-    FROM   T1NFRP_PHY."TBL_NFRP_DATE_CONFIG"
-    WHERE  FILTER_DATE = 'CURRENT_MONTH' AND FILTER_TYPE = 'PYR+CYR'
-),
-FILTERED_DATA AS (
-    SELECT A.M_PRODUCT_CONCAT, A.DATA_TYPE, A.T_VERSION, A.MONTH_ABR, A.CFX, A.RFX
-    FROM T1NFRP_PHY."CV_UP_NFRP_ALLDATA" A
-    INNER JOIN PERIODS P ON A.E_PERIOD_DATE = P.E_PERIOD_DATE
-    WHERE A.T_REPORTING = 'FPNA' AND A.M_ACCOUNT_0 = 'Income'
-    AND A.M_PRODUCT_0 IN ('Banking', 'Markets', 'Transaction services')
-    AND A.DATA_TYPE IN ('Actuals', 'Outlook_PM', 'Budget') AND A.T_VERSION IN ('YTD', 'MTD')
-),
-ALL_MEASURES AS (
-    SELECT F.M_PRODUCT_CONCAT,
-        SUM(CASE WHEN F.DATA_TYPE = 'Actuals' AND F.T_VERSION = 'YTD' THEN F.CFX ELSE 0 END) AS YTD_CFX,
-        SUM(CASE WHEN F.DATA_TYPE = 'Actuals' AND F.T_VERSION = 'MTD' THEN F.CFX ELSE 0 END) AS PY_YTD_CFX,
-        SUM(CASE WHEN F.DATA_TYPE = 'Outlook_PM' AND F.T_VERSION = 'YTD' AND F.MONTH_ABR = 'FY' THEN F.CFX ELSE 0 END) AS FY_OUTLOOK_CFX,
-        SUM(CASE WHEN F.DATA_TYPE = 'Budget' AND F.MONTH_ABR = 'FY' THEN F.CFX ELSE 0 END) AS FY_BUDGET_CFX,
-        SUM(CASE WHEN F.DATA_TYPE = 'Actuals' AND F.T_VERSION = 'YTD' THEN F.RFX ELSE 0 END) AS YTD_RFX,
-        SUM(CASE WHEN F.DATA_TYPE = 'Actuals' AND F.T_VERSION = 'MTD' THEN F.RFX ELSE 0 END) AS PY_YTD_RFX,
-        SUM(CASE WHEN F.DATA_TYPE = 'Outlook_PM' AND F.T_VERSION = 'YTD' AND F.MONTH_ABR = 'FY' THEN F.RFX ELSE 0 END) AS FY_OUTLOOK_RFX,
-        SUM(CASE WHEN F.DATA_TYPE = 'Budget' AND F.MONTH_ABR = 'FY' THEN F.RFX ELSE 0 END) AS FY_BUDGET_RFX
-    FROM FILTERED_DATA F GROUP BY F.M_PRODUCT_CONCAT
-)
-SELECT M.M_PRODUCT_CONCAT,
-    M.YTD_CFX, M.FY_OUTLOOK_CFX, M.FY_BUDGET_CFX,
-    CASE WHEN M.FY_OUTLOOK_CFX < 0 THEN LEAST(M.FY_OUTLOOK_CFX, M.FY_BUDGET_CFX) ELSE GREATEST(M.FY_OUTLOOK_CFX, M.FY_BUDGET_CFX) END AS FY_OUTLOOK_BUDGET_CFX,
-    CASE WHEN M.PY_YTD_CFX != 0 THEN ROUND((M.YTD_CFX - M.PY_YTD_CFX) * 100.0 / ABS(M.PY_YTD_CFX), 2) END AS YOY_PCT_CFX,
-    M.YTD_RFX, M.FY_OUTLOOK_RFX, M.FY_BUDGET_RFX,
-    CASE WHEN M.FY_OUTLOOK_RFX < 0 THEN LEAST(M.FY_OUTLOOK_RFX, M.FY_BUDGET_RFX) ELSE GREATEST(M.FY_OUTLOOK_RFX, M.FY_BUDGET_RFX) END AS FY_OUTLOOK_BUDGET_RFX,
-    CASE WHEN M.PY_YTD_RFX != 0 THEN ROUND((M.YTD_RFX - M.PY_YTD_RFX) * 100.0 / ABS(M.PY_YTD_RFX), 2) END AS YOY_PCT_RFX
-FROM ALL_MEASURES M ORDER BY M.M_PRODUCT_CONCAT`;
-
-var INCOME_BY_CLUSTER_SQL = `WITH PERIODS AS (
-    SELECT
-        MAX(CASE WHEN D.ADD16 = '0' THEN D.E_PERIOD_DATE END) AS CURRENT_YTD_PERIOD,
-        MAX(CASE WHEN D.ADD6 = 'PY_YTD' THEN D.E_PERIOD_DATE END) AS YTD_PY_PERIOD,
-        MAX(CASE WHEN D.ADD19 = 'CY' THEN D.E_PERIOD_DATE END) AS FY_OUTLOOK_PERIOD,
-        MAX(CASE WHEN D.ADD17 = '1' THEN D.E_PERIOD_DATE END) AS Q3_OUTLOOK_PERIOD
-    FROM T1NFRP_PHY."TBL_NFRP_DATE_CONFIG" D
-    WHERE D.FILTER_DATE = 'CURRENT_MONTH' AND D.FILTER_TYPE = 'PYR+CYR'
-),
-ALL_MEASURES AS (
-    SELECT A.M_PRODUCT_CONCAT,
-        SUM(CASE WHEN A.DATA_TYPE = 'Actuals' AND A.T_VERSION = 'YTD' AND A.E_PERIOD_DATE = P.CURRENT_YTD_PERIOD THEN A.CFX ELSE 0 END) AS YTD_ACTUALS_CFX,
-        SUM(CASE WHEN A.DATA_TYPE = 'Actuals' AND A.T_VERSION = 'MTD' AND A.E_PERIOD_DATE = P.YTD_PY_PERIOD THEN A.CFX ELSE 0 END) AS PY_YTD_ACTUALS_CFX,
-        SUM(CASE WHEN A.E_PERIOD_DATE = P.FY_OUTLOOK_PERIOD AND MONTH_ABR = 'FY' THEN A.CFX ELSE 0 END) AS FY_OUTLOOK_CFX,
-        SUM(CASE WHEN A.DATA_TYPE = 'Outlook_PM' AND A.T_VERSION = 'QTD' AND A.E_PERIOD_DATE = P.Q3_OUTLOOK_PERIOD THEN A.CFX ELSE 0 END) AS Q3_OUTLOOK_CFX,
-        SUM(CASE WHEN A.DATA_TYPE = 'Actuals' AND A.T_VERSION = 'YTD' AND A.E_PERIOD_DATE = P.CURRENT_YTD_PERIOD THEN A.RFX ELSE 0 END) AS YTD_ACTUALS_RFX,
-        SUM(CASE WHEN A.DATA_TYPE = 'Actuals' AND A.T_VERSION = 'MTD' AND A.E_PERIOD_DATE = P.YTD_PY_PERIOD THEN A.RFX ELSE 0 END) AS PY_YTD_ACTUALS_RFX,
-        SUM(CASE WHEN A.E_PERIOD_DATE = P.FY_OUTLOOK_PERIOD AND MONTH_ABR = 'FY' THEN A.RFX ELSE 0 END) AS FY_OUTLOOK_RFX,
-        SUM(CASE WHEN A.DATA_TYPE = 'Outlook_PM' AND A.T_VERSION = 'QTD' AND A.E_PERIOD_DATE = P.Q3_OUTLOOK_PERIOD THEN A.RFX ELSE 0 END) AS Q3_OUTLOOK_RFX
-    FROM T1NFRP_PHY."CV_UP_NFRP_ALLDATA" A
-    INNER JOIN PERIODS P ON A.E_PERIOD_DATE IN (P.CURRENT_YTD_PERIOD, P.YTD_PY_PERIOD, P.FY_OUTLOOK_PERIOD, P.Q3_OUTLOOK_PERIOD)
-    WHERE A.T_REPORTING = 'FPNA' AND A.M_ACCOUNT_0 = 'Income'
-    GROUP BY A.M_PRODUCT_CONCAT
-)
-SELECT M.M_PRODUCT_CONCAT,
-    M.YTD_ACTUALS_CFX, M.FY_OUTLOOK_CFX, M.Q3_OUTLOOK_CFX,
-    CASE WHEN M.PY_YTD_ACTUALS_CFX != 0 THEN ROUND((M.YTD_ACTUALS_CFX - M.PY_YTD_ACTUALS_CFX) * 100.0 / ABS(M.PY_YTD_ACTUALS_CFX), 2) END AS YOY_PCT_CFX,
-    M.YTD_ACTUALS_RFX, M.FY_OUTLOOK_RFX, M.Q3_OUTLOOK_RFX,
-    CASE WHEN M.PY_YTD_ACTUALS_RFX != 0 THEN ROUND((M.YTD_ACTUALS_RFX - M.PY_YTD_ACTUALS_RFX) * 100.0 / ABS(M.PY_YTD_ACTUALS_RFX), 2) END AS YOY_PCT_RFX
-FROM ALL_MEASURES M ORDER BY M.M_PRODUCT_CONCAT`;
-
-
-// ============================================================
 //  SERVICE HANDLER
 // ============================================================
 module.exports = cds.service.impl(async function (srv) {
 
 
-    // ── Startup: pre-load ReportingMaster ───────────────────────────────
+    // ── Startup: load ReportingMaster into memory ───────────────────────
+    // Reads all 12 widget SQL strings once into oQueryMap.
+    // Every getWidgetData call reads from memory — zero DB cost.
+    // If you change a query in ReportingMaster, restart cds watch.
     cds.on('served', async function () {
+
         console.log('[STARTUP] Loading ReportingMaster...');
+
         try {
             const aWidgets = await cds.db.run(
                 SELECT.from('nrfp.financials.ReportingMaster')
@@ -399,35 +313,57 @@ module.exports = cds.service.impl(async function (srv) {
             aWidgets.forEach(function (oRow) {
                 oQueryMap[oRow.widget] = oRow.query;
             });
-            // Only KPI widgets (IDs 1-12) go into oQueryMap
-            // Chart widgets (Income by Product, Income by Cluster) use
-            // their SQL constants defined above
-            console.log('[STARTUP] Loaded ' + aWidgets.length + ' widgets into memory');
+            console.log('[STARTUP] Loaded ' + Object.keys(oQueryMap).length + ' widgets: ' +
+                Object.keys(oQueryMap).join(', '));
         } catch (e) {
-            console.error('[STARTUP] Failed: ' + e.message);
+            console.error('[STARTUP] Failed to load ReportingMaster: ' + e.message);
         }
     });
 
 
     // ── getWidgetNames ────────────────────────────────────────────────────
+    // Returns widget names from oQueryMap (memory — no DB query).
+    // Order follows ReportingMaster ID order from startup load.
     srv.on('getWidgetNames', async () => {
-        var aKeys = Object.keys(oQueryMap).filter(function (k) {
-            // Only return the 12 KPI widgets, not the chart widgets
-            return !['Income by Product', 'Income by Cluster'].includes(k);
-        });
+
+        var aKeys = Object.keys(oQueryMap);
         if (aKeys.length > 0) return aKeys;
+
+        // Fallback if called before 'served' fires (edge case)
         var aWidgets = await cds.db.run(
             SELECT.from('nrfp.financials.ReportingMaster')
                   .columns('widget').orderBy('ID asc')
         );
-        return aWidgets
-            .map(function (w) { return w.widget; })
-            .filter(function (n) { return !['Income by Product','Income by Cluster'].includes(n); });
+        return aWidgets.map(function (w) { return w.widget; });
     });
 
 
     // ── getWidgetData ─────────────────────────────────────────────────────
-    // Single call — returns all 12 KPI widgets in parallel via hdb pool.
+    //
+    //  THE MAIN ENDPOINT — single call replaces 12+ individual calls.
+    //
+    //  Flow:
+    //  1. Read all widget SQL strings from oQueryMap (memory)
+    //  2. Replace T_REPORTING in each SQL with correct value
+    //  3. Fire all 12 queries simultaneously via Promise.all + hdb pool
+    //     Each query gets its own dedicated pool connection — true parallelism
+    //  4. Return array of 12 results, each containing rfx and cfx data
+    //
+    //  Response shape per item:
+    //  {
+    //    widget:     "Income",
+    //    status:     "ok",
+    //    durationMs: 843,
+    //    data:       '{"widget":"Income","rfx":{...},"cfx":{...}}'
+    //  }
+    //
+    //  data field JSON shape (from buildJson):
+    //  {
+    //    widget: "Income",
+    //    rfx: { ytdActuals, vsBudget, pqActuals, fyOutlook, ytdYoy, pqYoy, fyYoy },
+    //    cfx: { ytdActuals, vsBudget, pqActuals, fyOutlook, ytdYoy, pqYoy, fyYoy }
+    //  }
+    //
     srv.on('getWidgetData', async (req) => {
 
         const topGroup     = req.data.topGroup     || 'Group';
@@ -435,155 +371,51 @@ module.exports = cds.service.impl(async function (srv) {
         const currencyType = req.data.currencyType || 'RFX';
         const sReporting   = (topGroup === 'Group') ? 'FPNA' : topGroup;
 
-        const aKpiWidgets = Object.keys(oQueryMap).filter(function (k) {
-            return !['Income by Product', 'Income by Cluster'].includes(k);
-        });
+        const aWidgetNames = Object.keys(oQueryMap);
 
-        if (aKpiWidgets.length === 0) {
-            console.warn('[getWidgetData] oQueryMap empty — not loaded yet');
+        if (aWidgetNames.length === 0) {
+            console.warn('[getWidgetData] oQueryMap is empty — ReportingMaster not loaded yet');
             return [];
         }
 
         const tStart = Date.now();
 
         const aResults = await Promise.all(
-            aKpiWidgets.map(async function (sWidget) {
+            aWidgetNames.map(async function (sWidget) {
+
                 const sQuery = applyReporting(oQueryMap[sWidget], sReporting);
-                const tW     = Date.now();
+                const tWidget = Date.now();
+
                 try {
                     const aData = await runWithPool(sQuery);
                     return {
                         widget:     sWidget,
                         status:     'ok',
-                        durationMs: Date.now() - tW,
+                        durationMs: Date.now() - tWidget,
                         data:       JSON.stringify(buildJson(sWidget, aData))
                     };
                 } catch (e) {
-                    console.error('[getWidgetData] Error: ' + sWidget + ' — ' + e.message);
+                    console.error('[getWidgetData] Error for ' + sWidget + ': ' + e.message);
                     return {
                         widget:     sWidget,
                         status:     'error: ' + e.message,
-                        durationMs: Date.now() - tW,
+                        durationMs: Date.now() - tWidget,
                         data:       JSON.stringify({ error: e.message })
                     };
                 }
             })
         );
 
-        console.log('[getWidgetData] Done in ' + (Date.now() - tStart) + 'ms');
+        console.log('[getWidgetData] All ' + aResults.length + ' widgets done in ' +
+            (Date.now() - tStart) + 'ms (' + topGroup + ')');
+
         return aResults;
     });
 
 
-    // ── getIncomeByProduct ────────────────────────────────────────────────
-    //
-    //  Returns income broken down by product (Banking, Markets, etc.)
-    //  for rendering a grouped bar chart.
-    //
-    //  Response JSON shape per row:
-    //  {
-    //    product:            "Banking",
-    //    ytdCfx:             12500000,
-    //    fyOutlookCfx:       15000000,
-    //    fyBudgetCfx:        14000000,
-    //    fyOutlookBudgetCfx: 15000000,   ← max(FY Outlook, FY Budget)
-    //    yoyPctCfx:          8.5,        ← YTD vs PY YTD %
-    //    ytdRfx:             ...,
-    //    fyOutlookRfx:       ...,
-    //    fyBudgetRfx:        ...,
-    //    fyOutlookBudgetRfx: ...,
-    //    yoyPctRfx:          ...
-    //  }
-    srv.on('getIncomeByProduct', async (req) => {
-
-        const topGroup   = req.data.topGroup   || 'Group';
-        const sReporting = (topGroup === 'Group') ? 'FPNA' : topGroup;
-
-        const sQuery = applyReporting(INCOME_BY_PRODUCT_SQL, sReporting);
-        const tStart = Date.now();
-
-        try {
-            const aRows = await runWithPool(sQuery);
-
-            const aResult = (aRows || []).map(function (r) {
-                return {
-                    product:            r.M_PRODUCT_CONCAT   || '',
-                    ytdCfx:             parseFloat(r.YTD_CFX)              || 0,
-                    fyOutlookCfx:       parseFloat(r.FY_OUTLOOK_CFX)       || 0,
-                    fyBudgetCfx:        parseFloat(r.FY_BUDGET_CFX)        || 0,
-                    fyOutlookBudgetCfx: parseFloat(r.FY_OUTLOOK_BUDGET_CFX)|| 0,
-                    yoyPctCfx:          r.YOY_PCT_CFX != null ? parseFloat(r.YOY_PCT_CFX) : null,
-                    ytdRfx:             parseFloat(r.YTD_RFX)              || 0,
-                    fyOutlookRfx:       parseFloat(r.FY_OUTLOOK_RFX)       || 0,
-                    fyBudgetRfx:        parseFloat(r.FY_BUDGET_RFX)        || 0,
-                    fyOutlookBudgetRfx: parseFloat(r.FY_OUTLOOK_BUDGET_RFX)|| 0,
-                    yoyPctRfx:          r.YOY_PCT_RFX != null ? parseFloat(r.YOY_PCT_RFX) : null
-                };
-            });
-
-            console.log('[getIncomeByProduct] ' + aResult.length + ' rows in ' + (Date.now() - tStart) + 'ms');
-            return aResult;
-
-        } catch (e) {
-            console.error('[getIncomeByProduct] Error: ' + e.message);
-            return [];
-        }
-    });
-
-
-    // ── getIncomeByCluster ────────────────────────────────────────────────
-    //
-    //  Returns income broken down by cluster (M_PRODUCT_CONCAT)
-    //  for rendering a grouped bar chart.
-    //
-    //  Response JSON shape per row:
-    //  {
-    //    cluster:       "CIB - Banking",
-    //    ytdActualsCfx: 8500000,
-    //    fyOutlookCfx:  10000000,
-    //    q3OutlookCfx:  9200000,
-    //    yoyPctCfx:     6.2,        ← YTD vs PY YTD %
-    //    ytdActualsRfx: ...,
-    //    fyOutlookRfx:  ...,
-    //    q3OutlookRfx:  ...,
-    //    yoyPctRfx:     ...
-    //  }
-    srv.on('getIncomeByCluster', async (req) => {
-
-        const topGroup   = req.data.topGroup   || 'Group';
-        const sReporting = (topGroup === 'Group') ? 'FPNA' : topGroup;
-
-        const sQuery = applyReporting(INCOME_BY_CLUSTER_SQL, sReporting);
-        const tStart = Date.now();
-
-        try {
-            const aRows = await runWithPool(sQuery);
-
-            const aResult = (aRows || []).map(function (r) {
-                return {
-                    cluster:       r.M_PRODUCT_CONCAT        || '',
-                    ytdActualsCfx: parseFloat(r.YTD_ACTUALS_CFX)     || 0,
-                    fyOutlookCfx:  parseFloat(r.FY_OUTLOOK_CFX)      || 0,
-                    q3OutlookCfx:  parseFloat(r.Q3_OUTLOOK_CFX)      || 0,
-                    yoyPctCfx:     r.YOY_PCT_CFX != null ? parseFloat(r.YOY_PCT_CFX) : null,
-                    ytdActualsRfx: parseFloat(r.YTD_ACTUALS_RFX)     || 0,
-                    fyOutlookRfx:  parseFloat(r.FY_OUTLOOK_RFX)      || 0,
-                    q3OutlookRfx:  parseFloat(r.Q3_OUTLOOK_RFX)      || 0,
-                    yoyPctRfx:     r.YOY_PCT_RFX != null ? parseFloat(r.YOY_PCT_RFX) : null
-                };
-            });
-
-            console.log('[getIncomeByCluster] ' + aResult.length + ' rows in ' + (Date.now() - tStart) + 'ms');
-            return aResult;
-
-        } catch (e) {
-            console.error('[getIncomeByCluster] Error: ' + e.message);
-            return [];
-        }
-    });
-
-
-    // ── getWidgetDataSingle (testing/debug only) ──────────────────────────
+    // ── getWidgetDataSingle ───────────────────────────────────────────────
+    // For debugging/testing individual widgets only.
+    // Not called by the React frontend in production.
     srv.on('getWidgetDataSingle', async (req) => {
 
         const widgetName   = req.data.widgetName;
@@ -592,7 +424,12 @@ module.exports = cds.service.impl(async function (srv) {
         const sStoredQuery = oQueryMap[widgetName];
 
         if (!sStoredQuery) {
-            return { widget: widgetName, status: 'error: not found', durationMs: 0, data: '{}' };
+            return {
+                widget:     widgetName,
+                status:     'error: widget not found in ReportingMaster',
+                durationMs: 0,
+                data:       '{}'
+            };
         }
 
         const sQuery = applyReporting(sStoredQuery, sReporting);
