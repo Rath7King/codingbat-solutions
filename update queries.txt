@@ -1,0 +1,2531 @@
+-- ============================================================
+-- 1. Controllable Head Count (ID = 11)
+-- ============================================================
+UPDATE "T1GDTL_PHY"."NRFP_FINANCIALS_REPORTINGMASTER"
+SET QUERY = '
+-- ============================================================
+-- WIDGET  : Controllable Headcount - Numeric Point
+-- REPORT  : CIB Dashboard
+-- SOURCE  : T1NFRP_PHY.CV_UP_NFRP_ALLDATA  (primary)
+--           T1NFRP_PHY.TBL_NFRP_DATE_CONFIG (period resolution)
+-- FILTERS : M_ACCOUNT_0 = ''Headcount''
+--           M_ACCOUNT_1 = ''Controllable FTE''
+--           T_REPORTING = ''FPNA''
+-- OUTPUT  : 14 columns — 7 measures × CFX + RFX separately
+-- ============================================================
+-- PERIOD MAPPING:
+--   ADD16 = ''0''              → CURRENT_YTD_PERIOD
+--   ADD17 = ''-1'', ADD19=''CY'' → CY_PQ_PERIOD
+--   ADD17 = ''-5'', ADD19=''PY'' → PY_PQ_PERIOD
+--   ADD6  = ''PY_YTD''         → YTD_PY_PERIOD
+--   ADD19 = ''CY'', MONTH_ABR=''FY'' → FY_OUTLOOK_PERIOD
+-- ============================================================
+
+WITH DATA_ANCHOR AS (
+    SELECT
+        MAX(A.E_PERIOD_DATE)                    AS ACTUALS_YTD_DATE
+    FROM T1NFRP_PHY."CV_UP_NFRP_ALLDATA" A
+    WHERE A.M_ACCOUNT_0  = ''Headcount''
+    AND   A.M_ACCOUNT_1  = ''Controllable FTE''
+    AND   A.T_REPORTING  = ''FPNA''
+    AND   A.DATA_TYPE    = ''Actuals''
+    AND   A.T_VERSION    = ''YTD''
+    AND   A.CFX          != 0
+    AND EXISTS (
+        SELECT 1
+        FROM T1NFRP_PHY."TBL_NFRP_DATE_CONFIG" D
+        WHERE D.FILTER_DATE   = TO_VARCHAR(A.E_PERIOD_DATE, ''YYYY-MM-DD'')
+    )
+),
+
+PERIODS AS (
+    SELECT
+        MAX(CASE WHEN D.ADD16 = ''0''
+            THEN D.E_PERIOD_DATE END)           AS CURRENT_YTD_PERIOD,
+        MAX(CASE WHEN D.ADD17 = ''-1''
+            AND D.ADD19 = ''CY''
+            THEN D.E_PERIOD_DATE END)           AS CY_PQ_PERIOD,
+        MAX(CASE WHEN D.ADD17 = ''-5''
+            AND D.ADD19 = ''PY''
+            THEN D.E_PERIOD_DATE END)           AS PY_PQ_PERIOD,
+        MAX(CASE WHEN D.ADD6  = ''PY_YTD''
+            THEN D.E_PERIOD_DATE END)           AS YTD_PY_PERIOD
+    FROM T1NFRP_PHY."TBL_NFRP_DATE_CONFIG" D
+    CROSS JOIN DATA_ANCHOR A
+    WHERE D.FILTER_DATE = TO_VARCHAR(A.ACTUALS_YTD_DATE, ''YYYY-MM-DD'')
+),
+
+FY_OUTLOOK_ANCHOR AS (
+    SELECT
+        MAX(E_PERIOD_DATE)                      AS FY_OUTLOOK_PERIOD
+    FROM T1NFRP_PHY."CV_UP_NFRP_ALLDATA"
+    WHERE M_ACCOUNT_0   = ''Headcount''
+    AND   M_ACCOUNT_1   = ''Controllable FTE''
+    AND   T_REPORTING   = ''FPNA''
+    AND   DATA_TYPE     = ''Outlook_PM''
+    AND   T_VERSION     = ''YTD''
+    AND   MONTH_ABR     = ''FY''
+),
+
+-- ✅ Pre-resolve all periods into one row
+PERIOD_SET AS (
+    SELECT
+        P.CURRENT_YTD_PERIOD,
+        P.CY_PQ_PERIOD,
+        P.PY_PQ_PERIOD,
+        P.YTD_PY_PERIOD,
+        OA.FY_OUTLOOK_PERIOD
+    FROM PERIODS             P
+    CROSS JOIN FY_OUTLOOK_ANCHOR OA
+),
+
+-- ✅ Single scan — CFX and RFX computed separately in same pass
+ALL_MEASURES AS (
+    SELECT
+        -- ══════════════════════════════════════════════
+        -- CFX COLUMNS
+        -- ══════════════════════════════════════════════
+
+        -- ── CFX: YTD Actuals ──────────────────────────
+        SUM(CASE
+            WHEN A.DATA_TYPE     = ''Actuals''
+            AND  A.T_VERSION     = ''YTD''
+            AND  A.E_PERIOD_DATE = PS.CURRENT_YTD_PERIOD
+            THEN A.CFX ELSE 0
+        END)                                    AS YTD_ACTUALS_CFX,
+
+        -- ── CFX: YTDB Budget ──────────────────────────
+        SUM(CASE
+            WHEN A.DATA_TYPE     = ''Budget''
+            AND  A.T_VERSION     = ''YTD''
+            AND  A.E_PERIOD_DATE = PS.CURRENT_YTD_PERIOD
+            THEN A.CFX ELSE 0
+        END)                                    AS YTDB_CFX,
+
+        -- ── CFX: CY PQ Actuals ────────────────────────
+        SUM(CASE
+            WHEN A.DATA_TYPE     = ''Actuals''
+            AND  A.T_VERSION     = ''QTD''
+            AND  A.E_PERIOD_DATE = PS.CY_PQ_PERIOD
+            THEN A.CFX ELSE 0
+        END)                                    AS CY_PQ_ACTUALS_CFX,
+
+        -- ── CFX: FY Outlook ───────────────────────────
+        -- Outlook_PM always RFX — CFX kept for reference
+        SUM(CASE
+            WHEN A.DATA_TYPE     = ''Outlook_PM''
+            AND  A.T_VERSION     = ''YTD''
+            AND  A.MONTH_ABR     = ''FY''
+            AND  A.E_PERIOD_DATE = PS.FY_OUTLOOK_PERIOD
+            THEN A.CFX ELSE 0
+        END)                                    AS FY_OUTLOOK_CFX,
+
+        -- ── CFX: YTD Actuals PY ───────────────────────
+        SUM(CASE
+            WHEN A.DATA_TYPE     = ''Actuals''
+            AND  A.T_VERSION     = ''MTD''
+            AND  A.E_PERIOD_DATE = PS.YTD_PY_PERIOD
+            THEN A.CFX ELSE 0
+        END)                                    AS YTD_ACTUALS_PY_CFX,
+
+        -- ── CFX: PY PQ Actuals ────────────────────────
+        SUM(CASE
+            WHEN A.DATA_TYPE     = ''Actuals''
+            AND  A.T_VERSION     = ''QTD''
+            AND  A.E_PERIOD_DATE = PS.PY_PQ_PERIOD
+            THEN A.CFX ELSE 0
+        END)                                    AS PY_PQ_ACTUALS_CFX,
+
+        -- ══════════════════════════════════════════════
+        -- RFX COLUMNS
+        -- ══════════════════════════════════════════════
+
+        -- ── RFX: YTD Actuals ──────────────────────────
+        SUM(CASE
+            WHEN A.DATA_TYPE     = ''Actuals''
+            AND  A.T_VERSION     = ''YTD''
+            AND  A.E_PERIOD_DATE = PS.CURRENT_YTD_PERIOD
+            THEN A.RFX ELSE 0
+        END)                                    AS YTD_ACTUALS_RFX,
+
+        -- ── RFX: YTDB Budget ──────────────────────────
+        SUM(CASE
+            WHEN A.DATA_TYPE     = ''Budget''
+            AND  A.T_VERSION     = ''YTD''
+            AND  A.E_PERIOD_DATE = PS.CURRENT_YTD_PERIOD
+            THEN A.RFX ELSE 0
+        END)                                    AS YTDB_RFX,
+
+        -- ── RFX: CY PQ Actuals ────────────────────────
+        SUM(CASE
+            WHEN A.DATA_TYPE     = ''Actuals''
+            AND  A.T_VERSION     = ''QTD''
+            AND  A.E_PERIOD_DATE = PS.CY_PQ_PERIOD
+            THEN A.RFX ELSE 0
+        END)                                    AS CY_PQ_ACTUALS_RFX,
+
+        -- ── RFX: FY Outlook ───────────────────────────
+        -- Outlook_PM always RFX
+        SUM(CASE
+            WHEN A.DATA_TYPE     = ''Outlook_PM''
+            AND  A.T_VERSION     = ''YTD''
+            AND  A.MONTH_ABR     = ''FY''
+            AND  A.E_PERIOD_DATE = PS.FY_OUTLOOK_PERIOD
+            THEN A.RFX ELSE 0
+        END)                                    AS FY_OUTLOOK_RFX,
+
+        -- ── RFX: YTD Actuals PY ───────────────────────
+        SUM(CASE
+            WHEN A.DATA_TYPE     = ''Actuals''
+            AND  A.T_VERSION     = ''MTD''
+            AND  A.E_PERIOD_DATE = PS.YTD_PY_PERIOD
+            THEN A.RFX ELSE 0
+        END)                                    AS YTD_ACTUALS_PY_RFX,
+
+        -- ── RFX: PY PQ Actuals ────────────────────────
+        SUM(CASE
+            WHEN A.DATA_TYPE     = ''Actuals''
+            AND  A.T_VERSION     = ''QTD''
+            AND  A.E_PERIOD_DATE = PS.PY_PQ_PERIOD
+            THEN A.RFX ELSE 0
+        END)                                    AS PY_PQ_ACTUALS_RFX
+
+    FROM T1NFRP_PHY."CV_UP_NFRP_ALLDATA" A
+    CROSS JOIN PERIOD_SET PS
+    WHERE A.M_ACCOUNT_0  = ''Headcount''
+    AND   A.M_ACCOUNT_1  = ''Controllable FTE''
+    AND   A.T_REPORTING  = ''FPNA''
+    AND   A.E_PERIOD_DATE IN (
+        PS.CURRENT_YTD_PERIOD,
+        PS.CY_PQ_PERIOD,
+        PS.PY_PQ_PERIOD,
+        PS.YTD_PY_PERIOD,
+        PS.FY_OUTLOOK_PERIOD
+    )
+)
+
+SELECT
+    -- ══════════════════════════════════════════════════════
+    -- CFX: 7 columns
+    -- ══════════════════════════════════════════════════════
+    M.YTD_ACTUALS_CFX,
+
+    -- Vs Budget: YTD Actuals – YTDB (absolute difference per spec)
+    (M.YTD_ACTUALS_CFX - M.YTDB_CFX)               AS VS_BUDGET_CFX,
+
+    M.CY_PQ_ACTUALS_CFX,
+    M.FY_OUTLOOK_CFX,
+
+    -- PY PQ Actuals YoY% : Compare(CY_PQ TO PY_PQ) as %
+    -- Formula: (CY_PQ - PY_PQ) * 100 / ABS(PY_PQ)
+    CASE WHEN M.PY_PQ_ACTUALS_CFX != 0
+        THEN ROUND(
+            (M.CY_PQ_ACTUALS_CFX - M.PY_PQ_ACTUALS_CFX)
+            * 100.0 / ABS(M.PY_PQ_ACTUALS_CFX), 2)
+    END                                             AS VAR_PY_PQ_YOY_PCT_CFX,
+
+    -- YTD Actual PY YoY% : Compare(YTD Actuals TO YTD Actual PY) as %
+    -- Formula: (YTD - YTD_PY) * 100 / ABS(YTD_PY)
+    CASE WHEN M.YTD_ACTUALS_PY_CFX != 0
+        THEN ROUND(
+            (M.YTD_ACTUALS_CFX - M.YTD_ACTUALS_PY_CFX)
+            * 100.0 / ABS(M.YTD_ACTUALS_PY_CFX), 2)
+    END                                             AS VAR_YTD_PY_YOY_PCT_CFX,
+
+    -- FY Outlook YoY% : Compare(FY Outlook TO YTD Actual PY) as %
+    -- Formula: (FY_OUTLOOK - YTD_PY) * 100 / ABS(YTD_PY)
+    CASE WHEN M.YTD_ACTUALS_PY_CFX != 0
+        THEN ROUND(
+            (M.FY_OUTLOOK_CFX - M.YTD_ACTUALS_PY_CFX)
+            * 100.0 / ABS(M.YTD_ACTUALS_PY_CFX), 2)
+    END                                             AS VAR_FY_VS_PY_YOY_PCT_CFX,
+
+    -- ══════════════════════════════════════════════════════
+    -- RFX: 7 columns
+    -- ══════════════════════════════════════════════════════
+    M.YTD_ACTUALS_RFX,
+
+    -- Vs Budget: YTD Actuals – YTDB (absolute difference per spec)
+    (M.YTD_ACTUALS_RFX - M.YTDB_RFX)               AS VS_BUDGET_RFX,
+
+    M.CY_PQ_ACTUALS_RFX,
+    M.FY_OUTLOOK_RFX,
+
+    -- PY PQ Actuals YoY% : Compare(CY_PQ TO PY_PQ) as %
+    CASE WHEN M.PY_PQ_ACTUALS_RFX != 0
+        THEN ROUND(
+            (M.CY_PQ_ACTUALS_RFX - M.PY_PQ_ACTUALS_RFX)
+            * 100.0 / ABS(M.PY_PQ_ACTUALS_RFX), 2)
+    END                                             AS VAR_PY_PQ_YOY_PCT_RFX,
+
+    -- YTD Actual PY YoY% : Compare(YTD Actuals TO YTD Actual PY) as %
+    CASE WHEN M.YTD_ACTUALS_PY_RFX != 0
+        THEN ROUND(
+            (M.YTD_ACTUALS_RFX - M.YTD_ACTUALS_PY_RFX)
+            * 100.0 / ABS(M.YTD_ACTUALS_PY_RFX), 2)
+    END                                             AS VAR_YTD_PY_YOY_PCT_RFX,
+
+    -- FY Outlook YoY% : Compare(FY Outlook TO YTD Actual PY) as %
+    CASE WHEN M.YTD_ACTUALS_PY_RFX != 0
+        THEN ROUND(
+            (M.FY_OUTLOOK_RFX - M.YTD_ACTUALS_PY_RFX)
+            * 100.0 / ABS(M.YTD_ACTUALS_PY_RFX), 2)
+    END                                             AS VAR_FY_VS_PY_YOY_PCT_RFX
+
+FROM PERIOD_SET          PS
+CROSS JOIN ALL_MEASURES  M;
+'
+WHERE ID = 11;
+
+
+-- ============================================================
+-- 2. Second RWA (ID = 12)
+-- ============================================================
+UPDATE "T1GDTL_PHY"."NRFP_FINANCIALS_REPORTINGMASTER"
+SET QUERY = '
+-- ============================================================
+-- WIDGET  : RWA - Numeric Point
+-- SOURCE  : T1NFRP_PHY.CV_UP_NFRP_ALLDATA  (primary)
+--           T1NFRP_PHY.TBL_NFRP_DATE_CONFIG (period resolution)
+-- FILTERS : M_ACCOUNT_0 = ''Risk Weighted Assets''
+--           T_REPORTING = ''FPNA''
+-- OUTPUT  : 14 columns — 7 measures × CFX + RFX separately
+-- ============================================================
+-- PERIOD MAPPING:
+--   ADD16 = ''0''              → CURRENT_YTD_PERIOD
+--   ADD17 = ''-1'', ADD19=''CY'' → CY_PQ_PERIOD
+--   ADD17 = ''-5'', ADD19=''PY'' → PY_PQ_PERIOD
+--   ADD6  = ''PY_YTD''         → YTD_PY_PERIOD
+--   ADD19 = ''CY'', MONTH_ABR=''FY'' → FY_OUTLOOK_PERIOD
+-- ============================================================
+
+WITH DATA_ANCHOR AS (
+    SELECT
+        MAX(A.E_PERIOD_DATE)                    AS ACTUALS_YTD_DATE
+    FROM T1NFRP_PHY."CV_UP_NFRP_ALLDATA" A
+    WHERE A.M_ACCOUNT_0  = ''Risk Weighted Assets''
+    AND   A.T_REPORTING  = ''FPNA''
+    AND   A.DATA_TYPE    = ''Actuals''
+    AND   A.T_VERSION    = ''YTD''
+    AND   A.CFX          != 0
+    AND EXISTS (
+        SELECT 1
+        FROM T1NFRP_PHY."TBL_NFRP_DATE_CONFIG" D
+        WHERE D.FILTER_DATE   = TO_VARCHAR(A.E_PERIOD_DATE, ''YYYY-MM-DD'')
+    )
+),
+
+PERIODS AS (
+    SELECT
+        MAX(CASE WHEN D.ADD16 = ''0''
+            THEN D.E_PERIOD_DATE END)           AS CURRENT_YTD_PERIOD,
+        MAX(CASE WHEN D.ADD17 = ''-1''
+            AND D.ADD19 = ''CY''
+            THEN D.E_PERIOD_DATE END)           AS CY_PQ_PERIOD,
+        MAX(CASE WHEN D.ADD17 = ''-5''
+            AND D.ADD19 = ''PY''
+            THEN D.E_PERIOD_DATE END)           AS PY_PQ_PERIOD,
+        MAX(CASE WHEN D.ADD6  = ''PY_YTD''
+            THEN D.E_PERIOD_DATE END)           AS YTD_PY_PERIOD
+    FROM T1NFRP_PHY."TBL_NFRP_DATE_CONFIG" D
+    CROSS JOIN DATA_ANCHOR A
+    WHERE D.FILTER_DATE = TO_VARCHAR(A.ACTUALS_YTD_DATE, ''YYYY-MM-DD'')
+),
+
+FY_OUTLOOK_ANCHOR AS (
+    SELECT
+        MAX(E_PERIOD_DATE)                      AS FY_OUTLOOK_PERIOD
+    FROM T1NFRP_PHY."CV_UP_NFRP_ALLDATA"
+    WHERE M_ACCOUNT_0   = ''Risk Weighted Assets''
+    AND   T_REPORTING   = ''FPNA''
+    AND   DATA_TYPE     = ''Outlook_PM''
+    AND   T_VERSION     = ''YTD''
+    AND   MONTH_ABR     = ''FY''
+),
+
+-- ✅ Pre-resolve all periods into one row
+PERIOD_SET AS (
+    SELECT
+        P.CURRENT_YTD_PERIOD,
+        P.CY_PQ_PERIOD,
+        P.PY_PQ_PERIOD,
+        P.YTD_PY_PERIOD,
+        OA.FY_OUTLOOK_PERIOD
+    FROM PERIODS             P
+    CROSS JOIN FY_OUTLOOK_ANCHOR OA
+),
+
+-- ✅ Single scan — CFX and RFX computed separately in same pass
+ALL_MEASURES AS (
+    SELECT
+        -- ══════════════════════════════════════════════
+        -- CFX COLUMNS
+        -- ══════════════════════════════════════════════
+
+        -- ── CFX: YTD Actuals ──────────────────────────
+        SUM(CASE
+            WHEN A.DATA_TYPE     = ''Actuals''
+            AND  A.T_VERSION     = ''YTD''
+            AND  A.E_PERIOD_DATE = PS.CURRENT_YTD_PERIOD
+            THEN A.CFX ELSE 0
+        END)                                    AS YTD_ACTUALS_CFX,
+
+        -- ── CFX: YTDB Budget ──────────────────────────
+        SUM(CASE
+            WHEN A.DATA_TYPE     = ''Budget''
+            AND  A.T_VERSION     = ''YTD''
+            AND  A.E_PERIOD_DATE = PS.CURRENT_YTD_PERIOD
+            THEN A.CFX ELSE 0
+        END)                                    AS YTDB_CFX,
+
+        -- ── CFX: CY PQ Actuals ────────────────────────
+        SUM(CASE
+            WHEN A.DATA_TYPE     = ''Actuals''
+            AND  A.T_VERSION     = ''QTD''
+            AND  A.E_PERIOD_DATE = PS.CY_PQ_PERIOD
+            THEN A.CFX ELSE 0
+        END)                                    AS CY_PQ_ACTUALS_CFX,
+
+        -- ── CFX: FY Outlook ───────────────────────────
+        -- Outlook_PM always RFX — CFX kept for reference
+        SUM(CASE
+            WHEN A.DATA_TYPE     = ''Outlook_PM''
+            AND  A.T_VERSION     = ''YTD''
+            AND  A.MONTH_ABR     = ''FY''
+            AND  A.E_PERIOD_DATE = PS.FY_OUTLOOK_PERIOD
+            THEN A.CFX ELSE 0
+        END)                                    AS FY_OUTLOOK_CFX,
+
+        -- ── CFX: YTD Actuals PY ───────────────────────
+        SUM(CASE
+            WHEN A.DATA_TYPE     = ''Actuals''
+            AND  A.T_VERSION     = ''MTD''
+            AND  A.E_PERIOD_DATE = PS.YTD_PY_PERIOD
+            THEN A.CFX ELSE 0
+        END)                                    AS YTD_ACTUALS_PY_CFX,
+
+        -- ── CFX: PY PQ Actuals ────────────────────────
+        SUM(CASE
+            WHEN A.DATA_TYPE     = ''Actuals''
+            AND  A.T_VERSION     = ''QTD''
+            AND  A.E_PERIOD_DATE = PS.PY_PQ_PERIOD
+            THEN A.CFX ELSE 0
+        END)                                    AS PY_PQ_ACTUALS_CFX,
+
+        -- ══════════════════════════════════════════════
+        -- RFX COLUMNS
+        -- ══════════════════════════════════════════════
+
+        -- ── RFX: YTD Actuals ──────────────────────────
+        SUM(CASE
+            WHEN A.DATA_TYPE     = ''Actuals''
+            AND  A.T_VERSION     = ''YTD''
+            AND  A.E_PERIOD_DATE = PS.CURRENT_YTD_PERIOD
+            THEN A.RFX ELSE 0
+        END)                                    AS YTD_ACTUALS_RFX,
+
+        -- ── RFX: YTDB Budget ──────────────────────────
+        SUM(CASE
+            WHEN A.DATA_TYPE     = ''Budget''
+            AND  A.T_VERSION     = ''YTD''
+            AND  A.E_PERIOD_DATE = PS.CURRENT_YTD_PERIOD
+            THEN A.RFX ELSE 0
+        END)                                    AS YTDB_RFX,
+
+        -- ── RFX: CY PQ Actuals ────────────────────────
+        SUM(CASE
+            WHEN A.DATA_TYPE     = ''Actuals''
+            AND  A.T_VERSION     = ''QTD''
+            AND  A.E_PERIOD_DATE = PS.CY_PQ_PERIOD
+            THEN A.RFX ELSE 0
+        END)                                    AS CY_PQ_ACTUALS_RFX,
+
+        -- ── RFX: FY Outlook ───────────────────────────
+        -- Outlook_PM always RFX
+        SUM(CASE
+            WHEN A.DATA_TYPE     = ''Outlook_PM''
+            AND  A.T_VERSION     = ''YTD''
+            AND  A.MONTH_ABR     = ''FY''
+            AND  A.E_PERIOD_DATE = PS.FY_OUTLOOK_PERIOD
+            THEN A.RFX ELSE 0
+        END)                                    AS FY_OUTLOOK_RFX,
+
+        -- ── RFX: YTD Actuals PY ───────────────────────
+        SUM(CASE
+            WHEN A.DATA_TYPE     = ''Actuals''
+            AND  A.T_VERSION     = ''MTD''
+            AND  A.E_PERIOD_DATE = PS.YTD_PY_PERIOD
+            THEN A.RFX ELSE 0
+        END)                                    AS YTD_ACTUALS_PY_RFX,
+
+        -- ── RFX: PY PQ Actuals ────────────────────────
+        SUM(CASE
+            WHEN A.DATA_TYPE     = ''Actuals''
+            AND  A.T_VERSION     = ''QTD''
+            AND  A.E_PERIOD_DATE = PS.PY_PQ_PERIOD
+            THEN A.RFX ELSE 0
+        END)                                    AS PY_PQ_ACTUALS_RFX
+
+    FROM T1NFRP_PHY."CV_UP_NFRP_ALLDATA" A
+    CROSS JOIN PERIOD_SET PS
+    WHERE A.M_ACCOUNT_0  = ''Risk Weighted Assets''
+    AND   A.T_REPORTING  = ''FPNA''
+    AND   A.E_PERIOD_DATE IN (
+        PS.CURRENT_YTD_PERIOD,
+        PS.CY_PQ_PERIOD,
+        PS.PY_PQ_PERIOD,
+        PS.YTD_PY_PERIOD,
+        PS.FY_OUTLOOK_PERIOD
+    )
+)
+
+SELECT
+    -- ══════════════════════════════════════════════════════
+    -- CFX: 7 columns
+    -- ══════════════════════════════════════════════════════
+    M.YTD_ACTUALS_CFX,
+
+    -- Vs Budget: YTD Actuals – YTDB (absolute difference per spec)
+    (M.YTD_ACTUALS_CFX - M.YTDB_CFX)               AS VS_BUDGET_CFX,
+
+    M.CY_PQ_ACTUALS_CFX,
+    M.FY_OUTLOOK_CFX,
+
+    -- PY PQ Actuals YoY% : Compare(CY_PQ TO PY_PQ) as %
+    -- Formula: (CY_PQ - PY_PQ) * 100 / ABS(PY_PQ)
+    CASE WHEN M.PY_PQ_ACTUALS_CFX != 0
+        THEN ROUND(
+            (M.CY_PQ_ACTUALS_CFX - M.PY_PQ_ACTUALS_CFX)
+            * 100.0 / ABS(M.PY_PQ_ACTUALS_CFX), 2)
+    END                                             AS VAR_PY_PQ_YOY_PCT_CFX,
+
+    -- YTD Actual PY YoY% : Compare(YTD Actuals TO YTD Actual PY) as %
+    -- Formula: (YTD - YTD_PY) * 100 / ABS(YTD_PY)
+    CASE WHEN M.YTD_ACTUALS_PY_CFX != 0
+        THEN ROUND(
+            (M.YTD_ACTUALS_CFX - M.YTD_ACTUALS_PY_CFX)
+            * 100.0 / ABS(M.YTD_ACTUALS_PY_CFX), 2)
+    END                                             AS VAR_YTD_PY_YOY_PCT_CFX,
+
+    -- FY Outlook YoY% : Compare(FY Outlook TO YTD Actual PY) as %
+    -- Formula: (FY_OUTLOOK - YTD_PY) * 100 / ABS(YTD_PY)
+    CASE WHEN M.YTD_ACTUALS_PY_CFX != 0
+        THEN ROUND(
+            (M.FY_OUTLOOK_CFX - M.YTD_ACTUALS_PY_CFX)
+            * 100.0 / ABS(M.YTD_ACTUALS_PY_CFX), 2)
+    END                                             AS VAR_FY_VS_PY_YOY_PCT_CFX,
+
+    -- ══════════════════════════════════════════════════════
+    -- RFX: 7 columns
+    -- ══════════════════════════════════════════════════════
+    M.YTD_ACTUALS_RFX,
+
+    -- Vs Budget: YTD Actuals – YTDB (absolute difference per spec)
+    (M.YTD_ACTUALS_RFX - M.YTDB_RFX)               AS VS_BUDGET_RFX,
+
+    M.CY_PQ_ACTUALS_RFX,
+    M.FY_OUTLOOK_RFX,
+
+    -- PY PQ Actuals YoY% : Compare(CY_PQ TO PY_PQ) as %
+    CASE WHEN M.PY_PQ_ACTUALS_RFX != 0
+        THEN ROUND(
+            (M.CY_PQ_ACTUALS_RFX - M.PY_PQ_ACTUALS_RFX)
+            * 100.0 / ABS(M.PY_PQ_ACTUALS_RFX), 2)
+    END                                             AS VAR_PY_PQ_YOY_PCT_RFX,
+
+    -- YTD Actual PY YoY% : Compare(YTD Actuals TO YTD Actual PY) as %
+    CASE WHEN M.YTD_ACTUALS_PY_RFX != 0
+        THEN ROUND(
+            (M.YTD_ACTUALS_RFX - M.YTD_ACTUALS_PY_RFX)
+            * 100.0 / ABS(M.YTD_ACTUALS_PY_RFX), 2)
+    END                                             AS VAR_YTD_PY_YOY_PCT_RFX,
+
+    -- FY Outlook YoY% : Compare(FY Outlook TO YTD Actual PY) as %
+    CASE WHEN M.YTD_ACTUALS_PY_RFX != 0
+        THEN ROUND(
+            (M.FY_OUTLOOK_RFX - M.YTD_ACTUALS_PY_RFX)
+            * 100.0 / ABS(M.YTD_ACTUALS_PY_RFX), 2)
+    END                                             AS VAR_FY_VS_PY_YOY_PCT_RFX
+
+FROM PERIOD_SET          PS
+CROSS JOIN ALL_MEASURES  M;
+'
+WHERE ID = 12;
+
+
+-- ============================================================
+-- 3. JAWS (ID = 9)
+-- ============================================================
+UPDATE "T1GDTL_PHY"."NRFP_FINANCIALS_REPORTINGMASTER"
+SET QUERY = '
+-- ============================================================
+-- WIDGET  : JAWS% - Numeric Point
+-- OUTPUT  : 14 columns — 7 measures × CFX + RFX separately
+-- ============================================================
+
+WITH DATA_ANCHOR AS (
+    SELECT 
+        MAX(A.E_PERIOD_DATE)                        AS ACTUALS_YTD_DATE
+    FROM T1NFRP_PHY."CV_UP_NFRP_ALLDATA" A
+    WHERE A.M_ACCOUNT_5   = ''Software''
+    AND   A.T_REPORTING   = ''FPNA''
+    AND   A.DATA_TYPE     = ''Actuals''
+    AND   A.T_VERSION     = ''YTD''
+    AND   A.CFX           != 0
+    AND EXISTS (
+        SELECT 1
+        FROM T1NFRP_PHY."TBL_NFRP_DATE_CONFIG" D
+        WHERE D.FILTER_DATE   = TO_VARCHAR(A.E_PERIOD_DATE, ''YYYY-MM-DD'')
+    )
+),
+
+PERIODS AS (
+    SELECT
+        MAX(CASE WHEN D.ADD16 = ''0''
+            THEN D.E_PERIOD_DATE END)               AS CURRENT_YTD_PERIOD,
+        MAX(CASE WHEN D.ADD9 = ''-12''
+            THEN D.E_PERIOD_DATE END)               AS PYYTD_PERIOD,
+        MAX(CASE WHEN D.ADD17 = ''-1''
+            AND D.ADD19 = ''CY''
+            THEN D.E_PERIOD_DATE END)               AS PREV_QTR_PERIOD,
+        MAX(CASE WHEN D.ADD17 = ''-5''
+            AND D.ADD19 = ''PY''
+            THEN D.E_PERIOD_DATE END)               AS PYPQTR_PERIOD
+    FROM T1NFRP_PHY."TBL_NFRP_DATE_CONFIG" D
+    CROSS JOIN DATA_ANCHOR A
+    WHERE D.FILTER_DATE = TO_VARCHAR(A.ACTUALS_YTD_DATE, ''YYYY-MM-DD'')
+),
+
+FY_ANCHOR AS (
+    SELECT MAX(E_PERIOD_DATE)                       AS FY_ACTPY_PERIOD
+    FROM T1NFRP_PHY."CV_UP_NFRP_ALLDATA"
+    WHERE M_ACCOUNT_5   = ''Software''
+    AND   T_REPORTING   = ''FPNA''
+    AND   DATA_TYPE     = ''Actuals''
+    AND   T_VERSION     = ''YTD''
+    AND   MONTH_ABR     = ''FY''
+),
+
+FY_OUTLOOK_ANCHOR AS (
+    SELECT MAX(E_PERIOD_DATE)                       AS FY_OUTLOOK_PERIOD
+    FROM T1NFRP_PHY."CV_UP_NFRP_ALLDATA"
+    WHERE M_ACCOUNT_5   = ''Software''
+    AND   E_BOOKS       = ''NEWF - OL''
+    AND   T_REPORTING   = ''FPNA''
+    AND   DATA_TYPE     = ''Outlook_PM''
+    AND   T_VERSION     = ''YTD''
+),
+
+PERIOD_SET AS (
+    SELECT
+        P.CURRENT_YTD_PERIOD,
+        P.PYYTD_PERIOD,
+        P.PREV_QTR_PERIOD,
+        P.PYPQTR_PERIOD,
+        FA.FY_ACTPY_PERIOD,
+        OA.FY_OUTLOOK_PERIOD
+    FROM PERIODS             P
+    CROSS JOIN FY_ANCHOR         FA
+    CROSS JOIN FY_OUTLOOK_ANCHOR OA
+),
+
+-- ✅ Single scan — CFX and RFX computed separately in same pass
+ALL_MEASURES AS (
+    SELECT
+        -- ══════════════════════════════════════════════
+        -- CFX COLUMNS
+        -- ══════════════════════════════════════════════
+
+        -- ── CFX: YTD Actuals ──────────────────────────
+        SUM(CASE
+            WHEN A.DATA_TYPE     = ''Actuals''
+            AND  A.T_VERSION     = ''YTD''
+            AND  A.E_PERIOD_DATE = PS.CURRENT_YTD_PERIOD
+            THEN A.CFX ELSE 0
+        END)                                            AS YTD_ACTUALS_CFX,
+
+        -- ── CFX: VS Budget (RBUDYTD) ──────────────────
+        SUM(CASE
+            WHEN A.DATA_TYPE     = ''Budget''
+            AND  A.T_VERSION     = ''YTD''
+            AND  A.E_PERIOD_DATE = PS.CURRENT_YTD_PERIOD
+            THEN A.CFX ELSE 0
+        END)                                            AS RBUDYTD_CFX,
+
+        -- ── CFX: PQtr Actuals ─────────────────────────
+        SUM(CASE
+            WHEN A.DATA_TYPE     = ''Actuals''
+            AND  A.T_VERSION     = ''QTD''
+            AND  A.E_PERIOD_DATE = PS.PREV_QTR_PERIOD
+            THEN A.CFX ELSE 0
+        END)                                            AS PQTR_ACTUALS_CFX,
+
+        -- ── CFX: FY Outlook ───────────────────────────
+        SUM(CASE
+            WHEN A.DATA_TYPE     = ''Outlook_PM''
+            AND  A.T_VERSION     = ''YTD''
+            AND  A.E_BOOKS       = ''NEWF - OL''
+            AND  A.E_PERIOD_DATE = PS.FY_OUTLOOK_PERIOD
+            THEN A.CFX ELSE 0
+        END)                                            AS FY_OUTLOOK_CFX,
+
+        -- ── CFX: FY ActPY ─────────────────────────────
+        SUM(CASE
+            WHEN A.DATA_TYPE     = ''Actuals''
+            AND  A.T_VERSION     = ''YTD''
+            AND  A.MONTH_ABR     = ''FY''
+            AND  A.E_PERIOD_DATE = PS.FY_ACTPY_PERIOD
+            THEN A.CFX ELSE 0
+        END)                                            AS FY_ACTPY_CFX,
+
+        -- ── CFX: PYYTD Actuals ────────────────────────
+        SUM(CASE
+            WHEN A.DATA_TYPE     = ''Actuals''
+            AND  A.T_VERSION     = ''YTD''
+            AND  A.E_PERIOD_DATE = PS.PYYTD_PERIOD
+            THEN A.CFX ELSE 0
+        END)                                            AS PYYTD_ACTUALS_CFX,
+
+        -- ── CFX: PYPQtr Actuals ───────────────────────
+        SUM(CASE
+            WHEN A.DATA_TYPE     = ''Actuals''
+            AND  A.T_VERSION     = ''QTD''
+            AND  A.E_PERIOD_DATE = PS.PYPQTR_PERIOD
+            THEN A.CFX ELSE 0
+        END)                                            AS PYPQTR_ACTUALS_CFX,
+
+        -- ══════════════════════════════════════════════
+        -- RFX COLUMNS
+        -- ══════════════════════════════════════════════
+
+        -- ── RFX: YTD Actuals ──────────────────────────
+        SUM(CASE
+            WHEN A.DATA_TYPE     = ''Actuals''
+            AND  A.T_VERSION     = ''YTD''
+            AND  A.E_PERIOD_DATE = PS.CURRENT_YTD_PERIOD
+            THEN A.RFX ELSE 0
+        END)                                            AS YTD_ACTUALS_RFX,
+
+        -- ── RFX: VS Budget (RBUDYTD) ──────────────────
+        SUM(CASE
+            WHEN A.DATA_TYPE     = ''Budget''
+            AND  A.T_VERSION     = ''YTD''
+            AND  A.E_PERIOD_DATE = PS.CURRENT_YTD_PERIOD
+            THEN A.RFX ELSE 0
+        END)                                            AS RBUDYTD_RFX,
+
+        -- ── RFX: PQtr Actuals ─────────────────────────
+        SUM(CASE
+            WHEN A.DATA_TYPE     = ''Actuals''
+            AND  A.T_VERSION     = ''QTD''
+            AND  A.E_PERIOD_DATE = PS.PREV_QTR_PERIOD
+            THEN A.RFX ELSE 0
+        END)                                            AS PQTR_ACTUALS_RFX,
+
+        -- ── RFX: FY Outlook ───────────────────────────
+        SUM(CASE
+            WHEN A.DATA_TYPE     = ''Outlook_PM''
+            AND  A.T_VERSION     = ''YTD''
+            AND  A.E_BOOKS       = ''NEWF - OL''
+            AND  A.E_PERIOD_DATE = PS.FY_OUTLOOK_PERIOD
+            THEN A.RFX ELSE 0
+        END)                                            AS FY_OUTLOOK_RFX,
+
+        -- ── RFX: FY ActPY ─────────────────────────────
+        SUM(CASE
+            WHEN A.DATA_TYPE     = ''Actuals''
+            AND  A.T_VERSION     = ''YTD''
+            AND  A.MONTH_ABR     = ''FY''
+            AND  A.E_PERIOD_DATE = PS.FY_ACTPY_PERIOD
+            THEN A.RFX ELSE 0
+        END)                                            AS FY_ACTPY_RFX,
+
+        -- ── RFX: PYYTD Actuals ────────────────────────
+        SUM(CASE
+            WHEN A.DATA_TYPE     = ''Actuals''
+            AND  A.T_VERSION     = ''YTD''
+            AND  A.E_PERIOD_DATE = PS.PYYTD_PERIOD
+            THEN A.RFX ELSE 0
+        END)                                            AS PYYTD_ACTUALS_RFX,
+
+        -- ── RFX: PYPQtr Actuals ───────────────────────
+        SUM(CASE
+            WHEN A.DATA_TYPE     = ''Actuals''
+            AND  A.T_VERSION     = ''QTD''
+            AND  A.E_PERIOD_DATE = PS.PYPQTR_PERIOD
+            THEN A.RFX ELSE 0
+        END)                                            AS PYPQTR_ACTUALS_RFX
+
+    FROM T1NFRP_PHY."CV_UP_NFRP_ALLDATA" A
+    CROSS JOIN PERIOD_SET PS
+    WHERE A.M_ACCOUNT_5   = ''Software''
+    AND   A.T_REPORTING   = ''FPNA''
+    AND   A.E_PERIOD_DATE IN (
+        PS.CURRENT_YTD_PERIOD,
+        PS.PYYTD_PERIOD,
+        PS.PREV_QTR_PERIOD,
+        PS.PYPQTR_PERIOD,
+        PS.FY_ACTPY_PERIOD,
+        PS.FY_OUTLOOK_PERIOD
+    )
+)
+
+SELECT
+    -- ══════════════════════════════════════════════════════
+    -- CFX: 7 columns
+    -- ══════════════════════════════════════════════════════
+    M.YTD_ACTUALS_CFX,
+    (M.YTD_ACTUALS_CFX  - M.RBUDYTD_CFX)            AS VS_BUDGET_CFX,
+    M.PQTR_ACTUALS_CFX,
+    M.FY_OUTLOOK_CFX,
+    -- Variances CFX — displayed as percentage
+    CASE WHEN M.FY_ACTPY_CFX != 0
+        THEN ROUND((M.FY_OUTLOOK_CFX   - M.FY_ACTPY_CFX)*100.0/ABS(M.FY_ACTPY_CFX),2)
+    END                                             AS VAR_FY_ACTPY_PCT_CFX,
+    CASE WHEN M.PYPQTR_ACTUALS_CFX != 0
+        THEN ROUND((M.PQTR_ACTUALS_CFX - M.PYPQTR_ACTUALS_CFX)*100.0/ABS(M.PYPQTR_ACTUALS_CFX),2)
+    END                                             AS VAR_PYPQTR_PCT_CFX,
+    CASE WHEN M.PYYTD_ACTUALS_CFX != 0
+        THEN ROUND((M.YTD_ACTUALS_CFX  - M.PYYTD_ACTUALS_CFX)*100.0/ABS(M.PYYTD_ACTUALS_CFX),2)
+    END                                             AS VAR_PYYTD_PCT_CFX,
+
+    -- ══════════════════════════════════════════════════════
+    -- RFX: 7 columns
+    -- ══════════════════════════════════════════════════════
+    M.YTD_ACTUALS_RFX,
+    (M.YTD_ACTUALS_RFX  - M.RBUDYTD_RFX)            AS VS_BUDGET_RFX,
+    M.PQTR_ACTUALS_RFX,
+    M.FY_OUTLOOK_RFX,
+    -- Variances RFX — displayed as percentage
+    CASE WHEN M.FY_ACTPY_RFX != 0
+        THEN ROUND((M.FY_OUTLOOK_RFX   - M.FY_ACTPY_RFX)*100.0/ABS(M.FY_ACTPY_RFX),2)
+    END                                             AS VAR_FY_ACTPY_PCT_RFX,
+    CASE WHEN M.PYPQTR_ACTUALS_RFX != 0
+        THEN ROUND((M.PQTR_ACTUALS_RFX - M.PYPQTR_ACTUALS_RFX)*100.0/ABS(M.PYPQTR_ACTUALS_RFX),2)
+    END                                             AS VAR_PYPQTR_PCT_RFX,
+    CASE WHEN M.PYYTD_ACTUALS_RFX != 0
+        THEN ROUND((M.YTD_ACTUALS_RFX  - M.PYYTD_ACTUALS_RFX)*100.0/ABS(M.PYYTD_ACTUALS_RFX),2)
+    END                                             AS VAR_PYYTD_PCT_RFX
+
+FROM PERIOD_SET          PS
+CROSS JOIN ALL_MEASURES  M;
+'
+WHERE ID = 9;
+
+
+-- ============================================================
+-- 4. CIR (ID = 10)
+-- ============================================================
+UPDATE "T1GDTL_PHY"."NRFP_FINANCIALS_REPORTINGMASTER"
+SET QUERY = '
+-- ============================================================
+-- WIDGET  : CIR% - Numeric Point
+-- SOURCE  : T1NFRP_PHY.CV_UP_NFRP_ALLRATIOS (CIR% data)
+--           T1NFRP_PHY.TBL_NFRP_DATE_CONFIG  (period resolution)
+-- FILTER  : T_REPORTING = ''FPNA'', M_ACCOUNT_5 LIKE ''CIR %''
+-- OUTPUT  : 14 columns — 7 measures × CFX_N + RFX_N separately
+-- ============================================================
+
+WITH DATA_ANCHOR AS (
+    SELECT
+        MAX(R.E_PERIOD_DATE)                        AS ACTUALS_YTD_DATE
+    FROM T1NFRP_PHY."CV_UP_NFRP_ALLRATIOS" R
+    WHERE R.M_ACCOUNT_5   LIKE ''CIR %''
+    AND   R.T_REPORTING   = ''FPNA''
+    AND   R.DATA_TYPE     = ''Actuals''
+    AND   R.T_VERSION     = ''YTD''
+    AND   R.CFX_N         != 0
+    AND EXISTS (
+        SELECT 1
+        FROM T1NFRP_PHY."TBL_NFRP_DATE_CONFIG" D
+        WHERE D.FILTER_DATE   = TO_VARCHAR(R.E_PERIOD_DATE, ''YYYY-MM-DD'')
+    )
+),
+
+PERIODS AS (
+    SELECT
+        MAX(CASE WHEN D.ADD16 = ''0''
+            THEN D.E_PERIOD_DATE END)               AS CURRENT_YTD_PERIOD,
+        MAX(CASE WHEN D.ADD9 = ''-12''
+            THEN D.E_PERIOD_DATE END)               AS PYYTD_PERIOD,
+        MAX(CASE WHEN D.ADD17 = ''-1''
+            AND D.ADD19 = ''CY''
+            THEN D.E_PERIOD_DATE END)               AS PREV_QTR_PERIOD,
+        MAX(CASE WHEN D.ADD17 = ''-5''
+            AND D.ADD19 = ''PY''
+            THEN D.E_PERIOD_DATE END)               AS PYPQTR_PERIOD
+    FROM T1NFRP_PHY."TBL_NFRP_DATE_CONFIG" D
+    CROSS JOIN DATA_ANCHOR A
+    WHERE D.FILTER_DATE = TO_VARCHAR(A.ACTUALS_YTD_DATE, ''YYYY-MM-DD'')
+),
+
+FY_ANCHOR AS (
+    SELECT MAX(E_PERIOD_DATE)                       AS FY_ACTPY_PERIOD
+    FROM T1NFRP_PHY."CV_UP_NFRP_ALLRATIOS"
+    WHERE M_ACCOUNT_5   LIKE ''CIR %''
+    AND   T_REPORTING   = ''FPNA''
+    AND   DATA_TYPE     = ''Actuals''
+    AND   T_VERSION     = ''YTD''
+    AND   MONTH_ABR     = ''FY''
+),
+
+FY_OUTLOOK_ANCHOR AS (
+    SELECT MAX(E_PERIOD_DATE)                       AS FY_OUTLOOK_PERIOD
+    FROM T1NFRP_PHY."CV_UP_NFRP_ALLRATIOS"
+    WHERE M_ACCOUNT_5   LIKE ''CIR %''
+    AND   E_BOOKS       = ''NEWF - OL''
+    AND   T_REPORTING   = ''FPNA''
+    AND   DATA_TYPE     = ''Outlook_PM''
+    AND   T_VERSION     = ''YTD''
+),
+
+-- ✅ Pre-resolve all periods into one row
+PERIOD_SET AS (
+    SELECT
+        P.CURRENT_YTD_PERIOD,
+        P.PYYTD_PERIOD,
+        P.PREV_QTR_PERIOD,
+        P.PYPQTR_PERIOD,
+        FA.FY_ACTPY_PERIOD,
+        OA.FY_OUTLOOK_PERIOD
+    FROM PERIODS             P
+    CROSS JOIN FY_ANCHOR         FA
+    CROSS JOIN FY_OUTLOOK_ANCHOR OA
+),
+
+-- ✅ Single scan — CFX_N and RFX_N computed separately in same pass
+ALL_MEASURES AS (
+    SELECT
+        -- ══════════════════════════════════════════════
+        -- CFX_N COLUMNS
+        -- ══════════════════════════════════════════════
+
+        -- ── CFX_N: YTD Actuals ────────────────────────
+        SUM(CASE
+            WHEN R.DATA_TYPE     = ''Actuals''
+            AND  R.T_VERSION     = ''YTD''
+            AND  R.E_PERIOD_DATE = PS.CURRENT_YTD_PERIOD
+            THEN R.CFX_N ELSE 0
+        END)                                            AS YTD_ACTUALS_CFX,
+
+        -- ── CFX_N: VS Budget (RBUDYTD) ────────────────
+        SUM(CASE
+            WHEN R.DATA_TYPE     = ''Budget''
+            AND  R.T_VERSION     = ''YTD''
+            AND  R.E_PERIOD_DATE = PS.CURRENT_YTD_PERIOD
+            THEN R.CFX_N ELSE 0
+        END)                                            AS RBUDYTD_CFX,
+
+        -- ── CFX_N: PQtr Actuals ───────────────────────
+        SUM(CASE
+            WHEN R.DATA_TYPE     = ''Actuals''
+            AND  R.T_VERSION     = ''QTD''
+            AND  R.E_PERIOD_DATE = PS.PREV_QTR_PERIOD
+            THEN R.CFX_N ELSE 0
+        END)                                            AS PQTR_ACTUALS_CFX,
+
+        -- ── CFX_N: FY Outlook ─────────────────────────
+        SUM(CASE
+            WHEN R.DATA_TYPE     = ''Outlook_PM''
+            AND  R.T_VERSION     = ''YTD''
+            AND  R.E_BOOKS       = ''NEWF - OL''
+            AND  R.E_PERIOD_DATE = PS.FY_OUTLOOK_PERIOD
+            THEN R.CFX_N ELSE 0
+        END)                                            AS FY_OUTLOOK_CFX,
+
+        -- ── CFX_N: FY ActPY ───────────────────────────
+        SUM(CASE
+            WHEN R.DATA_TYPE     = ''Actuals''
+            AND  R.T_VERSION     = ''YTD''
+            AND  R.MONTH_ABR     = ''FY''
+            AND  R.E_PERIOD_DATE = PS.FY_ACTPY_PERIOD
+            THEN R.CFX_N ELSE 0
+        END)                                            AS FY_ACTPY_CFX,
+
+        -- ── CFX_N: PYYTD Actuals ──────────────────────
+        SUM(CASE
+            WHEN R.DATA_TYPE     = ''Actuals''
+            AND  R.T_VERSION     = ''YTD''
+            AND  R.E_PERIOD_DATE = PS.PYYTD_PERIOD
+            THEN R.CFX_N ELSE 0
+        END)                                            AS PYYTD_ACTUALS_CFX,
+
+        -- ── CFX_N: PYPQtr Actuals ─────────────────────
+        SUM(CASE
+            WHEN R.DATA_TYPE     = ''Actuals''
+            AND  R.T_VERSION     = ''QTD''
+            AND  R.E_PERIOD_DATE = PS.PYPQTR_PERIOD
+            THEN R.CFX_N ELSE 0
+        END)                                            AS PYPQTR_ACTUALS_CFX,
+
+        -- ══════════════════════════════════════════════
+        -- RFX_N COLUMNS
+        -- ══════════════════════════════════════════════
+
+        -- ── RFX_N: YTD Actuals ────────────────────────
+        SUM(CASE
+            WHEN R.DATA_TYPE     = ''Actuals''
+            AND  R.T_VERSION     = ''YTD''
+            AND  R.E_PERIOD_DATE = PS.CURRENT_YTD_PERIOD
+            THEN R.RFX_N ELSE 0
+        END)                                            AS YTD_ACTUALS_RFX,
+
+        -- ── RFX_N: VS Budget (RBUDYTD) ────────────────
+        SUM(CASE
+            WHEN R.DATA_TYPE     = ''Budget''
+            AND  R.T_VERSION     = ''YTD''
+            AND  R.E_PERIOD_DATE = PS.CURRENT_YTD_PERIOD
+            THEN R.RFX_N ELSE 0
+        END)                                            AS RBUDYTD_RFX,
+
+        -- ── RFX_N: PQtr Actuals ───────────────────────
+        SUM(CASE
+            WHEN R.DATA_TYPE     = ''Actuals''
+            AND  R.T_VERSION     = ''QTD''
+            AND  R.E_PERIOD_DATE = PS.PREV_QTR_PERIOD
+            THEN R.RFX_N ELSE 0
+        END)                                            AS PQTR_ACTUALS_RFX,
+
+        -- ── RFX_N: FY Outlook ─────────────────────────
+        SUM(CASE
+            WHEN R.DATA_TYPE     = ''Outlook_PM''
+            AND  R.T_VERSION     = ''YTD''
+            AND  R.E_BOOKS       = ''NEWF - OL''
+            AND  R.E_PERIOD_DATE = PS.FY_OUTLOOK_PERIOD
+            THEN R.RFX_N ELSE 0
+        END)                                            AS FY_OUTLOOK_RFX,
+
+        -- ── RFX_N: FY ActPY ───────────────────────────
+        SUM(CASE
+            WHEN R.DATA_TYPE     = ''Actuals''
+            AND  R.T_VERSION     = ''YTD''
+            AND  R.MONTH_ABR     = ''FY''
+            AND  R.E_PERIOD_DATE = PS.FY_ACTPY_PERIOD
+            THEN R.RFX_N ELSE 0
+        END)                                            AS FY_ACTPY_RFX,
+
+        -- ── RFX_N: PYYTD Actuals ──────────────────────
+        SUM(CASE
+            WHEN R.DATA_TYPE     = ''Actuals''
+            AND  R.T_VERSION     = ''YTD''
+            AND  R.E_PERIOD_DATE = PS.PYYTD_PERIOD
+            THEN R.RFX_N ELSE 0
+        END)                                            AS PYYTD_ACTUALS_RFX,
+
+        -- ── RFX_N: PYPQtr Actuals ─────────────────────
+        SUM(CASE
+            WHEN R.DATA_TYPE     = ''Actuals''
+            AND  R.T_VERSION     = ''QTD''
+            AND  R.E_PERIOD_DATE = PS.PYPQTR_PERIOD
+            THEN R.RFX_N ELSE 0
+        END)                                            AS PYPQTR_ACTUALS_RFX
+
+    FROM T1NFRP_PHY."CV_UP_NFRP_ALLRATIOS" R
+    CROSS JOIN PERIOD_SET PS
+    WHERE R.M_ACCOUNT_5   LIKE ''CIR %''
+    AND   R.T_REPORTING   = ''FPNA''
+    AND   R.E_PERIOD_DATE IN (
+        PS.CURRENT_YTD_PERIOD,
+        PS.PYYTD_PERIOD,
+        PS.PREV_QTR_PERIOD,
+        PS.PYPQTR_PERIOD,
+        PS.FY_ACTPY_PERIOD,
+        PS.FY_OUTLOOK_PERIOD
+    )
+)
+
+SELECT
+    -- ══════════════════════════════════════════════════════
+    -- CFX_N: 7 columns
+    -- ══════════════════════════════════════════════════════
+    M.YTD_ACTUALS_CFX,
+    (M.YTD_ACTUALS_CFX   - M.RBUDYTD_CFX)          AS VS_BUDGET_CFX,
+    M.PQTR_ACTUALS_CFX,
+    M.FY_OUTLOOK_CFX,
+    -- Variances CFX — displayed as percentage
+    CASE WHEN M.FY_ACTPY_CFX != 0
+        THEN ROUND((M.FY_OUTLOOK_CFX   - M.FY_ACTPY_CFX)*100.0/ABS(M.FY_ACTPY_CFX),2)
+    END                                             AS VAR_FY_ACTPY_PCT_CFX,
+    CASE WHEN M.PYPQTR_ACTUALS_CFX != 0
+        THEN ROUND((M.PQTR_ACTUALS_CFX - M.PYPQTR_ACTUALS_CFX)*100.0/ABS(M.PYPQTR_ACTUALS_CFX),2)
+    END                                             AS VAR_PYPQTR_PCT_CFX,
+    CASE WHEN M.PYYTD_ACTUALS_CFX != 0
+        THEN ROUND((M.YTD_ACTUALS_CFX  - M.PYYTD_ACTUALS_CFX)*100.0/ABS(M.PYYTD_ACTUALS_CFX),2)
+    END                                             AS VAR_PYYTD_PCT_CFX,
+
+    -- ══════════════════════════════════════════════════════
+    -- RFX_N: 7 columns
+    -- ══════════════════════════════════════════════════════
+    M.YTD_ACTUALS_RFX,
+    (M.YTD_ACTUALS_RFX   - M.RBUDYTD_RFX)          AS VS_BUDGET_RFX,
+    M.PQTR_ACTUALS_RFX,
+    M.FY_OUTLOOK_RFX,
+    -- Variances RFX — displayed as percentage
+    CASE WHEN M.PYPQTR_ACTUALS_RFX != 0
+        THEN ROUND((M.PQTR_ACTUALS_RFX - M.PYPQTR_ACTUALS_RFX)*100.0/ABS(M.PYPQTR_ACTUALS_RFX),2)
+    END                                             AS VAR_PYPQTR_PCT_RFX,
+    CASE WHEN M.PYYTD_ACTUALS_RFX != 0
+        THEN ROUND((M.YTD_ACTUALS_RFX  - M.PYYTD_ACTUALS_RFX)*100.0/ABS(M.PYYTD_ACTUALS_RFX),2)
+    END                                             AS VAR_PYYTD_PCT_RFX
+
+FROM PERIOD_SET          PS
+CROSS JOIN ALL_MEASURES  M;
+'
+WHERE ID = 10;
+
+
+
+-- ============================================================
+-- 5. First RWA (ID = 8)
+-- ============================================================
+UPDATE "T1GDTL_PHY"."NRFP_FINANCIALS_REPORTINGMASTER"
+SET QUERY = '
+WITH
+  CYPQactuals_rfx AS (
+    SELECT SUM(alldata.RFX) AS val FROM "T1NFRP_PHY"."CV_UP_NFRP_ALLDATA" alldata
+    INNER JOIN "T1NFRP_PHY"."TBL_NFRP_DATE_CONFIG" dateconfig
+      ON alldata.E_PERIOD_DATE = dateconfig.E_PERIOD_DATE
+    WHERE alldata.DATA_TYPE = ''Actuals'' AND dateconfig.ADD17 = -1 AND alldata.T_VERSION = ''QTD''
+      AND alldata.T_REPORTING = ''FPNA'' AND alldata.M_ACCOUNT_1 = ''Funded Liabilities'' AND dateconfig.FILTER_DATE = ''2025-08-01'' AND dateconfig.FILTER_TYPE = ''PYR+CYR''
+  ),
+  PYPQactuals_rfx AS (
+    SELECT SUM(alldata.RFX) AS val FROM "T1NFRP_PHY"."CV_UP_NFRP_ALLDATA" alldata
+    INNER JOIN "T1NFRP_PHY"."TBL_NFRP_DATE_CONFIG" dateconfig
+      ON alldata.E_PERIOD_DATE = dateconfig.E_PERIOD_DATE
+    WHERE alldata.DATA_TYPE = ''Actuals'' AND dateconfig.ADD17 = -5 AND alldata.T_VERSION = ''QTD''
+      AND alldata.T_REPORTING = ''FPNA'' AND alldata.M_ACCOUNT_1 = ''Funded Liabilities'' AND dateconfig.FILTER_DATE = ''2025-08-01'' AND dateconfig.FILTER_TYPE = ''PYR+CYR''
+  ),
+  CYPQactuals_cfx AS (
+    SELECT SUM(alldata.CFX) AS val FROM "T1NFRP_PHY"."CV_UP_NFRP_ALLDATA" alldata
+    INNER JOIN "T1NFRP_PHY"."TBL_NFRP_DATE_CONFIG" dateconfig
+      ON alldata.E_PERIOD_DATE = dateconfig.E_PERIOD_DATE
+    WHERE alldata.DATA_TYPE = ''Actuals'' AND dateconfig.ADD17 = -1 AND alldata.T_VERSION = ''QTD''
+      AND alldata.T_REPORTING = ''FPNA'' AND alldata.M_ACCOUNT_1 = ''Funded Liabilities'' AND dateconfig.FILTER_DATE = ''2025-08-01'' AND dateconfig.FILTER_TYPE = ''PYR+CYR''
+  ),
+  PYPQactuals_cfx AS (
+    SELECT SUM(alldata.CFX) AS val FROM "T1NFRP_PHY"."CV_UP_NFRP_ALLDATA" alldata
+    INNER JOIN "T1NFRP_PHY"."TBL_NFRP_DATE_CONFIG" dateconfig
+      ON alldata.E_PERIOD_DATE = dateconfig.E_PERIOD_DATE
+    WHERE alldata.DATA_TYPE = ''Actuals'' AND dateconfig.ADD17 = -5 AND alldata.T_VERSION = ''QTD''
+      AND alldata.T_REPORTING = ''FPNA'' AND alldata.M_ACCOUNT_1 = ''Funded Liabilities'' AND dateconfig.FILTER_DATE = ''2025-08-01'' AND dateconfig.FILTER_TYPE = ''PYR+CYR''
+  ),
+  YTDactuals_rfx AS (
+    SELECT SUM(alldata.RFX) AS val FROM "T1NFRP_PHY"."CV_UP_NFRP_ALLDATA" alldata
+    INNER JOIN "T1NFRP_PHY"."TBL_NFRP_DATE_CONFIG" dateconfig
+      ON alldata.E_PERIOD_DATE = dateconfig.E_PERIOD_DATE
+    WHERE alldata.DATA_TYPE = ''Actuals'' AND dateconfig.ADD16 = 0 AND alldata.T_VERSION = ''YTD''
+      AND alldata.T_REPORTING = ''FPNA'' AND alldata.M_ACCOUNT_1 = ''Funded Liabilities'' AND dateconfig.FILTER_DATE = ''2025-08-01'' AND dateconfig.FILTER_TYPE = ''PYR+CYR''
+  ),
+  YTDactualPY_rfx AS (
+    SELECT SUM(alldata.RFX) AS val FROM "T1NFRP_PHY"."CV_UP_NFRP_ALLDATA" alldata
+    INNER JOIN "T1NFRP_PHY"."TBL_NFRP_DATE_CONFIG" dateconfig
+      ON alldata.E_PERIOD_DATE = dateconfig.E_PERIOD_DATE
+    WHERE alldata.DATA_TYPE = ''Actuals'' AND dateconfig.ADD6 = ''PY_YTD'' AND alldata.T_VERSION = ''MTD''
+      AND alldata.T_REPORTING = ''FPNA'' AND alldata.M_ACCOUNT_1 = ''Funded Liabilities'' AND dateconfig.FILTER_DATE = ''2025-08-01'' AND dateconfig.FILTER_TYPE = ''PYR+CYR''
+  ),
+  YTDactuals_cfx AS (
+    SELECT SUM(alldata.CFX) AS val FROM "T1NFRP_PHY"."CV_UP_NFRP_ALLDATA" alldata
+    INNER JOIN "T1NFRP_PHY"."TBL_NFRP_DATE_CONFIG" dateconfig
+      ON alldata.E_PERIOD_DATE = dateconfig.E_PERIOD_DATE
+    WHERE alldata.DATA_TYPE = ''Actuals'' AND dateconfig.ADD16 = 0 AND alldata.T_VERSION = ''YTD''
+      AND alldata.T_REPORTING = ''FPNA'' AND alldata.M_ACCOUNT_1 = ''Funded Liabilities'' AND dateconfig.FILTER_DATE = ''2025-08-01'' AND dateconfig.FILTER_TYPE = ''PYR+CYR''
+  ),
+  YTDactualPY_cfx AS (
+    SELECT SUM(alldata.CFX) AS val FROM "T1NFRP_PHY"."CV_UP_NFRP_ALLDATA" alldata
+    INNER JOIN "T1NFRP_PHY"."TBL_NFRP_DATE_CONFIG" dateconfig
+      ON alldata.E_PERIOD_DATE = dateconfig.E_PERIOD_DATE
+    WHERE alldata.DATA_TYPE = ''Actuals'' AND dateconfig.ADD6 = ''PY_YTD'' AND alldata.T_VERSION = ''MTD''
+      AND alldata.T_REPORTING = ''FPNA'' AND alldata.M_ACCOUNT_1 = ''Funded Liabilities'' AND dateconfig.FILTER_DATE = ''2025-08-01'' AND dateconfig.FILTER_TYPE = ''PYR+CYR''
+  ),
+  FYoutlook_rfx AS (
+    SELECT SUM(alldata.RFX) AS val FROM "T1NFRP_PHY"."CV_UP_NFRP_ALLDATA" alldata
+    INNER JOIN "T1NFRP_PHY"."TBL_NFRP_DATE_CONFIG" dateconfig
+      ON alldata.E_PERIOD_DATE = dateconfig.E_PERIOD_DATE
+    WHERE alldata.DATA_TYPE = ''Outlook_PM'' AND alldata.T_VERSION = ''YTD'' AND alldata.MONTH_ABR = ''Feb'' AND dateconfig.ADD19 = ''CY''
+      AND alldata.T_REPORTING = ''FPNA'' AND alldata.M_ACCOUNT_1 = ''Funded Liabilities'' AND dateconfig.FILTER_DATE = ''2025-08-01'' AND dateconfig.FILTER_TYPE = ''PYR+CYR''
+  ),
+  FYoutlook_cfx AS (
+    SELECT SUM(alldata.CFX) AS val FROM "T1NFRP_PHY"."CV_UP_NFRP_ALLDATA" alldata
+    INNER JOIN "T1NFRP_PHY"."TBL_NFRP_DATE_CONFIG" dateconfig
+      ON alldata.E_PERIOD_DATE = dateconfig.E_PERIOD_DATE
+    WHERE alldata.DATA_TYPE = ''Outlook_PM'' AND alldata.T_VERSION = ''YTD'' AND alldata.MONTH_ABR = ''Feb'' AND dateconfig.ADD19 = ''CY''
+      AND alldata.T_REPORTING = ''FPNA'' AND alldata.M_ACCOUNT_1 = ''Funded Liabilities'' AND dateconfig.FILTER_DATE = ''2025-08-01'' AND dateconfig.FILTER_TYPE = ''PYR+CYR''
+  )
+SELECT
+  -- YTD ACTUALS (FPNA)
+  SUM(CASE WHEN alldata.DATA_TYPE = ''Actuals'' AND alldata.T_VERSION = ''YTD'' AND dateconfig.ADD16 = 0 THEN alldata.RFX ELSE 0 END) AS YTD_ACTUALS_RFX_FPNA,
+  SUM(CASE WHEN alldata.DATA_TYPE = ''Actuals'' AND alldata.T_VERSION = ''YTD'' AND dateconfig.ADD16 = 0 THEN alldata.CFX ELSE 0 END) AS YTD_ACTUALS_CFX_FPNA,
+
+  -- Vs Budget (FPNA)
+  SUM(CASE WHEN alldata.DATA_TYPE = ''Actuals'' AND alldata.T_VERSION = ''YTD'' AND dateconfig.ADD16 = 0 THEN alldata.RFX ELSE 0 END)
+  - SUM(CASE WHEN alldata.DATA_TYPE = ''Budget'' AND alldata.T_VERSION = ''YTD'' AND dateconfig.ADD16 = 0 THEN alldata.RFX ELSE 0 END) AS VS_BUDGET_RFX_FPNA,
+  SUM(CASE WHEN alldata.DATA_TYPE = ''Actuals'' AND alldata.T_VERSION = ''YTD'' AND dateconfig.ADD16 = 0 THEN alldata.CFX ELSE 0 END)
+  - SUM(CASE WHEN alldata.DATA_TYPE = ''Budget'' AND alldata.T_VERSION = ''YTD'' AND dateconfig.ADD16 = 0 THEN alldata.CFX ELSE 0 END) AS VS_BUDGET_CFX_FPNA,
+
+  -- PQTD Actuals (FPNA)
+  SUM(CASE WHEN alldata.DATA_TYPE = ''Actuals'' AND alldata.T_VERSION = ''QTD'' AND dateconfig.ADD17 = -1 THEN alldata.RFX ELSE 0 END) AS PQTD_ACTUALS_RFX_FPNA,
+  SUM(CASE WHEN alldata.DATA_TYPE = ''Actuals'' AND alldata.T_VERSION = ''QTD'' AND dateconfig.ADD17 = -1 THEN alldata.CFX ELSE 0 END) AS PQTD_ACTUALS_CFX_FPNA,
+
+  -- FY OUTLOOK (FPNA)
+  SUM(CASE WHEN alldata.DATA_TYPE = ''Outlook_PM'' AND alldata.T_VERSION = ''YTD'' AND dateconfig.ADD19 = ''CY'' AND alldata.MONTH_ABR = ''Feb'' THEN alldata.RFX ELSE 0 END) AS FY_OUTLOOK_RFX_FPNA,
+  SUM(CASE WHEN alldata.DATA_TYPE = ''Outlook_PM'' AND alldata.T_VERSION = ''YTD'' AND dateconfig.ADD19 = ''CY'' AND alldata.MONTH_ABR = ''Feb'' THEN alldata.CFX ELSE 0 END) AS FY_OUTLOOK_CFX_FPNA,
+
+  -- Variance (PYPQ Actuals, FPNA) as percentage (A-B)/abs(B)*100
+  CASE WHEN (SELECT val FROM PYPQactuals_rfx) != 0
+    THEN ((SELECT val FROM CYPQactuals_rfx) - (SELECT val FROM PYPQactuals_rfx)) / ABS((SELECT val FROM PYPQactuals_rfx)) * 100
+    ELSE NULL END AS VARIANCE_PYPQ_Actuals_RFX_FPNA,
+  CASE WHEN (SELECT val FROM PYPQactuals_cfx) != 0
+    THEN ((SELECT val FROM CYPQactuals_cfx) - (SELECT val FROM PYPQactuals_cfx)) / ABS((SELECT val FROM PYPQactuals_cfx)) * 100
+    ELSE NULL END AS VARIANCE_PYPQ_Actuals_CFX_FPNA,
+
+  -- YTD Actual PY (FPNA) as percentage (A-B)/abs(B)*100
+  CASE WHEN (SELECT val FROM YTDactualPY_rfx) != 0
+    THEN ((SELECT val FROM YTDactuals_rfx) - (SELECT val FROM YTDactualPY_rfx)) / ABS((SELECT val FROM YTDactualPY_rfx)) * 100
+    ELSE NULL END AS YTD_ACTUAL_RFX_FPNA,
+  CASE WHEN (SELECT val FROM YTDactualPY_cfx) != 0
+    THEN ((SELECT val FROM YTDactuals_cfx) - (SELECT val FROM YTDactualPY_cfx)) / ABS((SELECT val FROM YTDactualPY_cfx)) * 100
+    ELSE NULL END AS YTD_ACTUAL_CFX_FPNA,
+
+  -- YTD Actual PY (FPNA) as percentage (A-B)/abs(B)*100
+  CASE WHEN (SELECT val FROM YTDactualPY_rfx) != 0
+    THEN ((SELECT val FROM FYoutlook_rfx) - (SELECT val FROM YTDactualPY_rfx)) / ABS((SELECT val FROM YTDactualPY_rfx)) * 100
+    ELSE NULL END AS YTD_ACTUAL_2_RFX_FPNA,
+  CASE WHEN (SELECT val FROM YTDactualPY_cfx) != 0
+    THEN ((SELECT val FROM FYoutlook_cfx) - (SELECT val FROM YTDactualPY_cfx)) / ABS((SELECT val FROM YTDactualPY_cfx)) * 100
+    ELSE NULL END AS YTD_ACTUAL_2_CFX_FPNA
+
+FROM "T1NFRP_PHY"."CV_UP_NFRP_ALLDATA" alldata
+INNER JOIN "T1NFRP_PHY"."TBL_NFRP_DATE_CONFIG" dateconfig
+  ON alldata.E_PERIOD_DATE = dateconfig.E_PERIOD_DATE
+WHERE
+  alldata.T_REPORTING = ''FPNA''
+  AND alldata.M_ACCOUNT_1 = ''Funded Liabilities''
+  AND dateconfig.FILTER_DATE = ''2025-08-01''
+  AND dateconfig.FILTER_TYPE = ''PYR+CYR''
+  AND (
+    (alldata.DATA_TYPE = ''Actuals'' AND alldata.T_VERSION = ''YTD'' AND dateconfig.ADD16 = 0)
+    OR
+    (alldata.DATA_TYPE = ''Budget'' AND alldata.T_VERSION = ''YTD'' AND dateconfig.ADD16 = 0)
+    OR
+    (alldata.DATA_TYPE = ''Actuals'' AND alldata.T_VERSION = ''QTD'' AND dateconfig.ADD17 = -1)
+    OR
+    (alldata.DATA_TYPE = ''Outlook_PM'' AND alldata.T_VERSION = ''YTD'' AND dateconfig.ADD19 = ''CY'' AND alldata.MONTH_ABR = ''Feb'')
+    OR
+    (alldata.DATA_TYPE = ''Outlook_PM'' AND alldata.T_VERSION = ''YTD'' AND alldata.MONTH_ABR = ''Feb'' AND (dateconfig.ADD19 = ''CY'' OR dateconfig.ADD19 = ''PY''))
+    OR
+    (alldata.DATA_TYPE = ''Actuals'' AND dateconfig.ADD17 = -1 AND alldata.T_VERSION = ''QTD'')
+    OR
+    (alldata.DATA_TYPE = ''Actuals'' AND dateconfig.ADD17 = -5 AND alldata.T_VERSION = ''MTD'')
+    OR
+    (alldata.DATA_TYPE = ''Actuals'' AND dateconfig.ADD16 = 0 AND alldata.T_VERSION = ''YTD'')
+    OR
+    (alldata.DATA_TYPE = ''Actuals'' AND dateconfig.ADD6 = ''PY_YTD'' AND alldata.T_VERSION = ''MTD'')
+  )
+'
+WHERE ID = 8;
+
+
+-- ============================================================
+-- 6. Income (ID = 1)
+-- ============================================================
+UPDATE "T1GDTL_PHY"."NRFP_FINANCIALS_REPORTINGMASTER"
+SET QUERY = '
+-- MONTH_ABR = ''FY'',    FILTER_DATE = ''CURRENT_MONTH''
+WITH
+
+  FYoutlook_rfx AS (
+    SELECT SUM(alldata.RFX) AS val FROM "T1NFRP_PHY"."CV_UP_NFRP_ALLDATA" alldata
+    INNER JOIN "T1NFRP_PHY"."TBL_NFRP_DATE_CONFIG" dateconfig
+      ON alldata.E_PERIOD_DATE = dateconfig.E_PERIOD_DATE
+    WHERE alldata.DATA_TYPE = ''Outlook_PM'' AND alldata.T_VERSION = ''YTD'' AND alldata.MONTH_ABR = ''Feb'' AND dateconfig.ADD19 = ''CY''
+      AND alldata.T_REPORTING = ''FPNA'' AND alldata.M_ACCOUNT_0 = ''Income'' AND dateconfig.FILTER_DATE = ''2025-08-01'' AND dateconfig.FILTER_TYPE = ''PYR+CYR''
+  ),
+  PYFYoutlook_rfx AS (
+    SELECT SUM(alldata.RFX) AS val FROM "T1NFRP_PHY"."CV_UP_NFRP_ALLDATA" alldata
+    INNER JOIN "T1NFRP_PHY"."TBL_NFRP_DATE_CONFIG" dateconfig
+      ON alldata.E_PERIOD_DATE = dateconfig.E_PERIOD_DATE
+    WHERE alldata.DATA_TYPE = ''Outlook_PM'' AND alldata.T_VERSION = ''YTD'' AND alldata.MONTH_ABR = ''FY'' AND dateconfig.ADD19 = ''PY''
+      AND alldata.T_REPORTING = ''FPNA'' AND alldata.M_ACCOUNT_0 = ''Income'' AND dateconfig.FILTER_DATE = ''2025-08-01'' AND dateconfig.FILTER_TYPE = ''PYR+CYR''
+  ),
+  FYoutlook_cfx AS (
+    SELECT SUM(alldata.CFX) AS val FROM "T1NFRP_PHY"."CV_UP_NFRP_ALLDATA" alldata
+    INNER JOIN "T1NFRP_PHY"."TBL_NFRP_DATE_CONFIG" dateconfig
+      ON alldata.E_PERIOD_DATE = dateconfig.E_PERIOD_DATE
+    WHERE alldata.DATA_TYPE = ''Outlook_PM'' AND alldata.T_VERSION = ''YTD'' AND alldata.MONTH_ABR = ''Feb'' AND dateconfig.ADD19 = ''CY''
+      AND alldata.T_REPORTING = ''FPNA'' AND alldata.M_ACCOUNT_0 = ''Income'' AND dateconfig.FILTER_DATE = ''2025-08-01'' AND dateconfig.FILTER_TYPE = ''PYR+CYR''
+  ),
+  PYFYoutlook_cfx AS (
+    SELECT SUM(alldata.CFX) AS val FROM "T1NFRP_PHY"."CV_UP_NFRP_ALLDATA" alldata
+    INNER JOIN "T1NFRP_PHY"."TBL_NFRP_DATE_CONFIG" dateconfig
+      ON alldata.E_PERIOD_DATE = dateconfig.E_PERIOD_DATE
+    WHERE alldata.DATA_TYPE = ''Outlook_PM'' AND alldata.T_VERSION = ''YTD'' AND alldata.MONTH_ABR = ''Feb'' AND dateconfig.ADD19 = ''PY''
+      AND alldata.T_REPORTING = ''FPNA'' AND alldata.M_ACCOUNT_0 = ''Income'' AND dateconfig.FILTER_DATE = ''2025-08-01'' AND dateconfig.FILTER_TYPE = ''PYR+CYR''
+  ),
+  PQTDactuals_rfx AS (
+    SELECT SUM(alldata.RFX) AS val FROM "T1NFRP_PHY"."CV_UP_NFRP_ALLDATA" alldata
+    INNER JOIN "T1NFRP_PHY"."TBL_NFRP_DATE_CONFIG" dateconfig
+      ON alldata.E_PERIOD_DATE = dateconfig.E_PERIOD_DATE
+    WHERE alldata.DATA_TYPE = ''Actuals'' AND dateconfig.ADD17 = -1 AND alldata.T_VERSION = ''QTD''
+      AND alldata.T_REPORTING = ''FPNA'' AND alldata.M_ACCOUNT_0 = ''Income'' AND dateconfig.FILTER_DATE = ''2025-08-01'' AND dateconfig.FILTER_TYPE = ''PYR+CYR''
+  ),
+  PYPQTDactuals_rfx AS (
+    SELECT SUM(alldata.RFX) AS val FROM "T1NFRP_PHY"."CV_UP_NFRP_ALLDATA" alldata
+    INNER JOIN "T1NFRP_PHY"."TBL_NFRP_DATE_CONFIG" dateconfig
+      ON alldata.E_PERIOD_DATE = dateconfig.E_PERIOD_DATE
+    WHERE alldata.DATA_TYPE = ''Actuals'' AND dateconfig.ADD17 = -5 AND alldata.T_VERSION = ''MTD''
+      AND alldata.T_REPORTING = ''FPNA'' AND alldata.M_ACCOUNT_0 = ''Income'' AND dateconfig.FILTER_DATE = ''2025-08-01'' AND dateconfig.FILTER_TYPE = ''PYR+CYR''
+  ),
+  PQTDactuals_cfx AS (
+    SELECT SUM(alldata.CFX) AS val FROM "T1NFRP_PHY"."CV_UP_NFRP_ALLDATA" alldata
+    INNER JOIN "T1NFRP_PHY"."TBL_NFRP_DATE_CONFIG" dateconfig
+      ON alldata.E_PERIOD_DATE = dateconfig.E_PERIOD_DATE
+    WHERE alldata.DATA_TYPE = ''Actuals'' AND dateconfig.ADD17 = -1 AND alldata.T_VERSION = ''QTD''
+      AND alldata.T_REPORTING = ''FPNA'' AND alldata.M_ACCOUNT_0 = ''Income'' AND dateconfig.FILTER_DATE = ''2025-08-01'' AND dateconfig.FILTER_TYPE = ''PYR+CYR''
+  ),
+  PYPQTDactuals_cfx AS (
+    SELECT SUM(alldata.CFX) AS val FROM "T1NFRP_PHY"."CV_UP_NFRP_ALLDATA" alldata
+    INNER JOIN "T1NFRP_PHY"."TBL_NFRP_DATE_CONFIG" dateconfig
+      ON alldata.E_PERIOD_DATE = dateconfig.E_PERIOD_DATE
+    WHERE alldata.DATA_TYPE = ''Actuals'' AND dateconfig.ADD17 = -5 AND alldata.T_VERSION = ''MTD''
+      AND alldata.T_REPORTING = ''FPNA'' AND alldata.M_ACCOUNT_0 = ''Income'' AND dateconfig.FILTER_DATE = ''2025-08-01'' AND dateconfig.FILTER_TYPE = ''PYR+CYR''
+  ),
+  YTDactuals_rfx AS (
+    SELECT SUM(alldata.RFX) AS val FROM "T1NFRP_PHY"."CV_UP_NFRP_ALLDATA" alldata
+    INNER JOIN "T1NFRP_PHY"."TBL_NFRP_DATE_CONFIG" dateconfig
+      ON alldata.E_PERIOD_DATE = dateconfig.E_PERIOD_DATE
+    WHERE alldata.DATA_TYPE = ''Actuals'' AND dateconfig.ADD16 = 0 AND alldata.T_VERSION = ''YTD''
+      AND alldata.T_REPORTING = ''FPNA'' AND alldata.M_ACCOUNT_0 = ''Income'' AND dateconfig.FILTER_DATE = ''2025-08-01'' AND dateconfig.FILTER_TYPE = ''PYR+CYR''
+  ),
+  PYYTDactuals_rfx AS (
+    SELECT SUM(alldata.RFX) AS val FROM "T1NFRP_PHY"."CV_UP_NFRP_ALLDATA" alldata
+    INNER JOIN "T1NFRP_PHY"."TBL_NFRP_DATE_CONFIG" dateconfig
+      ON alldata.E_PERIOD_DATE = dateconfig.E_PERIOD_DATE
+    WHERE alldata.DATA_TYPE = ''Actuals'' AND dateconfig.ADD6 = ''PY_YTD'' AND alldata.T_VERSION = ''MTD''
+      AND alldata.T_REPORTING = ''FPNA'' AND alldata.M_ACCOUNT_0 = ''Income'' AND dateconfig.FILTER_DATE = ''2025-08-01'' AND dateconfig.FILTER_TYPE = ''PYR+CYR''
+  ),
+  YTDactuals_cfx AS (
+    SELECT SUM(alldata.CFX) AS val FROM "T1NFRP_PHY"."CV_UP_NFRP_ALLDATA" alldata
+    INNER JOIN "T1NFRP_PHY"."TBL_NFRP_DATE_CONFIG" dateconfig
+      ON alldata.E_PERIOD_DATE = dateconfig.E_PERIOD_DATE
+    WHERE alldata.DATA_TYPE = ''Actuals'' AND dateconfig.ADD16 = 0 AND alldata.T_VERSION = ''YTD''
+      AND alldata.T_REPORTING = ''FPNA'' AND alldata.M_ACCOUNT_0 = ''Income'' AND dateconfig.FILTER_DATE = ''2025-08-01'' AND dateconfig.FILTER_TYPE = ''PYR+CYR''
+  ),
+  PYYTDactuals_cfx AS (
+    SELECT SUM(alldata.CFX) AS val FROM "T1NFRP_PHY"."CV_UP_NFRP_ALLDATA" alldata
+    INNER JOIN "T1NFRP_PHY"."TBL_NFRP_DATE_CONFIG" dateconfig
+      ON alldata.E_PERIOD_DATE = dateconfig.E_PERIOD_DATE
+    WHERE alldata.DATA_TYPE = ''Actuals'' AND dateconfig.ADD6 = ''PY_YTD'' AND alldata.T_VERSION = ''MTD''
+      AND alldata.T_REPORTING = ''FPNA'' AND alldata.M_ACCOUNT_0 = ''Income'' AND dateconfig.FILTER_DATE = ''2025-08-01'' AND dateconfig.FILTER_TYPE = ''PYR+CYR''
+  )
+SELECT
+  -- YTD ACTUALS (FPNA)
+  SUM(CASE WHEN alldata.DATA_TYPE = ''Actuals'' AND alldata.T_VERSION = ''YTD'' AND dateconfig.ADD16 = 0 THEN alldata.RFX ELSE 0 END) AS YTD_ACTUALS_RFX_FPNA,
+  SUM(CASE WHEN alldata.DATA_TYPE = ''Actuals'' AND alldata.T_VERSION = ''YTD'' AND dateconfig.ADD16 = 0 THEN alldata.CFX ELSE 0 END) AS YTD_ACTUALS_CFX_FPNA,
+
+  -- Vs Budget (FPNA)
+  SUM(CASE WHEN alldata.DATA_TYPE = ''Actuals'' AND alldata.T_VERSION = ''YTD'' AND dateconfig.ADD16 = 0 THEN alldata.RFX ELSE 0 END)
+  - SUM(CASE WHEN alldata.DATA_TYPE = ''Budget'' AND alldata.T_VERSION = ''YTD'' AND dateconfig.ADD16 = 0 THEN alldata.RFX ELSE 0 END) AS VS_BUDGET_RFX_FPNA,
+  SUM(CASE WHEN alldata.DATA_TYPE = ''Actuals'' AND alldata.T_VERSION = ''YTD'' AND dateconfig.ADD16 = 0 THEN alldata.CFX ELSE 0 END)
+  - SUM(CASE WHEN alldata.DATA_TYPE = ''Budget'' AND alldata.T_VERSION = ''YTD'' AND dateconfig.ADD16 = 0 THEN alldata.CFX ELSE 0 END) AS VS_BUDGET_CFX_FPNA,
+
+  -- PQTD Actuals (FPNA)
+  SUM(CASE WHEN alldata.DATA_TYPE = ''Actuals'' AND alldata.T_VERSION = ''QTD'' AND dateconfig.ADD17 = -1 THEN alldata.RFX ELSE 0 END) AS PQTD_ACTUALS_RFX_FPNA,
+  SUM(CASE WHEN alldata.DATA_TYPE = ''Actuals'' AND alldata.T_VERSION = ''QTD'' AND dateconfig.ADD17 = -1 THEN alldata.CFX ELSE 0 END) AS PQTD_ACTUALS_CFX_FPNA,
+
+  -- FY OUTLOOK (FPNA)
+  SUM(CASE WHEN alldata.DATA_TYPE = ''Outlook_PM'' AND alldata.T_VERSION = ''YTD'' AND dateconfig.ADD19 = ''CY'' AND alldata.MONTH_ABR = ''Feb'' THEN alldata.RFX ELSE 0 END) AS FY_OUTLOOK_RFX_FPNA,
+  SUM(CASE WHEN alldata.DATA_TYPE = ''Outlook_PM'' AND alldata.T_VERSION = ''YTD'' AND dateconfig.ADD19 = ''CY'' AND alldata.MONTH_ABR = ''Feb'' THEN alldata.CFX ELSE 0 END) AS FY_OUTLOOK_CFX_FPNA,
+
+
+  -- Variance (PYFY Outlook, FPNA) as percentage (A-B)/abs(B)*100
+  CASE WHEN (SELECT val FROM PYFYoutlook_rfx) != 0
+    THEN ((SELECT val FROM FYoutlook_rfx) - (SELECT val FROM PYFYoutlook_rfx)) / ABS((SELECT val FROM PYFYoutlook_rfx)) * 100
+    ELSE NULL END AS VARIANCE_PYFY_OUTLOOK_RFX_FPNA,
+  CASE WHEN (SELECT val FROM PYFYoutlook_cfx) != 0
+    THEN ((SELECT val FROM FYoutlook_cfx) - (SELECT val FROM PYFYoutlook_cfx)) / ABS((SELECT val FROM PYFYoutlook_cfx)) * 100
+    ELSE NULL END AS VARIANCE_PYFY_OUTLOOK_CFX_FPNA,
+
+  -- PYPQTD Actuals (FPNA) as percentage (A-B)/abs(B)*100
+  CASE WHEN (SELECT val FROM PYPQTDactuals_rfx) != 0
+    THEN ((SELECT val FROM PQTDactuals_rfx) - (SELECT val FROM PYPQTDactuals_rfx)) / ABS((SELECT val FROM PYPQTDactuals_rfx)) * 100
+    ELSE NULL END AS PYPQTD_ACTUALS_RFX_FPNA,
+  CASE WHEN (SELECT val FROM PYPQTDactuals_cfx) != 0
+    THEN ((SELECT val FROM PQTDactuals_cfx) - (SELECT val FROM PYPQTDactuals_cfx)) / ABS((SELECT val FROM PYPQTDactuals_cfx)) * 100
+    ELSE NULL END AS PYPQTD_ACTUALS_CFX_FPNA,
+
+  -- PY_YTD Actuals (FPNA) as percentage (A-B)/abs(B)*100
+  CASE WHEN (SELECT val FROM PYYTDactuals_rfx) != 0
+    THEN ((SELECT val FROM YTDactuals_rfx) - (SELECT val FROM PYYTDactuals_rfx)) / ABS((SELECT val FROM PYYTDactuals_rfx)) * 100
+    ELSE NULL END AS PY_YTD_ACTUALS_RFX_FPNA,
+  CASE WHEN (SELECT val FROM PYYTDactuals_cfx) != 0
+    THEN ((SELECT val FROM YTDactuals_cfx) - (SELECT val FROM PYYTDactuals_cfx)) / ABS((SELECT val FROM PYYTDactuals_cfx)) * 100
+    ELSE NULL END AS PY_YTD_ACTUALS_CFX_FPNA
+
+FROM "T1NFRP_PHY"."CV_UP_NFRP_ALLDATA" alldata
+INNER JOIN "T1NFRP_PHY"."TBL_NFRP_DATE_CONFIG" dateconfig
+  ON alldata.E_PERIOD_DATE = dateconfig.E_PERIOD_DATE
+WHERE
+  alldata.T_REPORTING = ''FPNA''
+  AND alldata.M_ACCOUNT_0 = ''Income''
+  AND dateconfig.FILTER_DATE = ''2025-08-01''
+  AND dateconfig.FILTER_TYPE = ''PYR+CYR''
+  AND (
+    (alldata.DATA_TYPE = ''Actuals'' AND alldata.T_VERSION = ''YTD'' AND dateconfig.ADD16 = 0)
+    OR
+    (alldata.DATA_TYPE = ''Budget'' AND alldata.T_VERSION = ''YTD'' AND dateconfig.ADD16 = 0)
+    OR
+    (alldata.DATA_TYPE = ''Actuals'' AND alldata.T_VERSION = ''QTD'' AND dateconfig.ADD17 = -1)
+    OR
+    (alldata.DATA_TYPE = ''Outlook_PM'' AND alldata.T_VERSION = ''YTD'' AND dateconfig.ADD19 = ''CY'' AND alldata.MONTH_ABR = ''Feb'')
+    OR
+    (alldata.DATA_TYPE = ''Outlook_PM'' AND alldata.T_VERSION = ''YTD'' AND alldata.MONTH_ABR = ''Feb'' AND (dateconfig.ADD19 = ''CY'' OR dateconfig.ADD19 = ''PY''))
+    OR
+    (alldata.DATA_TYPE = ''Actuals'' AND dateconfig.ADD17 = -1 AND alldata.T_VERSION = ''QTD'')
+    OR
+    (alldata.DATA_TYPE = ''Actuals'' AND dateconfig.ADD17 = -5 AND alldata.T_VERSION = ''MTD'')
+    OR
+    (alldata.DATA_TYPE = ''Actuals'' AND dateconfig.ADD16 = 0 AND alldata.T_VERSION = ''YTD'')
+    OR
+    (alldata.DATA_TYPE = ''Actuals'' AND dateconfig.ADD6 = ''PY_YTD'' AND alldata.T_VERSION = ''MTD'')
+  )
+'
+WHERE ID = 1;
+
+
+-- ============================================================
+-- 7. NII (ID = 7)
+-- ============================================================
+UPDATE "T1GDTL_PHY"."NRFP_FINANCIALS_REPORTINGMASTER"
+SET QUERY = '
+WITH
+  YTDactuals_rfx AS (
+    SELECT SUM(alldata.RFX) AS val FROM "T1NFRP_PHY"."CV_UP_NFRP_ALLDATA" alldata
+    INNER JOIN "T1NFRP_PHY"."TBL_NFRP_DATE_CONFIG" dateconfig
+      ON alldata.E_PERIOD_DATE = dateconfig.E_PERIOD_DATE
+    WHERE alldata.DATA_TYPE = ''Actuals'' AND dateconfig.ADD16 = 0 AND alldata.T_VERSION = ''YTD''
+      AND alldata.T_REPORTING = ''FPNA'' AND alldata.M_ACCOUNT_0 = ''Income'' AND alldata.M_ACCOUNT_1 = ''Net Interest Income'' AND dateconfig.FILTER_DATE = ''2025-08-01'' AND dateconfig.FILTER_TYPE = ''PYR+CYR''
+  ),
+  YTDactualPY_rfx AS (
+    SELECT SUM(alldata.RFX) AS val FROM "T1NFRP_PHY"."CV_UP_NFRP_ALLDATA" alldata
+    INNER JOIN "T1NFRP_PHY"."TBL_NFRP_DATE_CONFIG" dateconfig
+      ON alldata.E_PERIOD_DATE = dateconfig.E_PERIOD_DATE
+    WHERE alldata.DATA_TYPE = ''Actuals'' AND dateconfig.ADD6 = ''PY_YTD'' AND alldata.T_VERSION = ''MTD''
+      AND alldata.T_REPORTING = ''FPNA'' AND alldata.M_ACCOUNT_0 = ''Income'' AND alldata.M_ACCOUNT_1 = ''Net Interest Income'' AND dateconfig.FILTER_DATE = ''2025-08-01'' AND dateconfig.FILTER_TYPE = ''PYR+CYR''
+  ),
+  YTDactuals_cfx AS (
+    SELECT SUM(alldata.CFX) AS val FROM "T1NFRP_PHY"."CV_UP_NFRP_ALLDATA" alldata
+    INNER JOIN "T1NFRP_PHY"."TBL_NFRP_DATE_CONFIG" dateconfig
+      ON alldata.E_PERIOD_DATE = dateconfig.E_PERIOD_DATE
+    WHERE alldata.DATA_TYPE = ''Actuals'' AND dateconfig.ADD16 = 0 AND alldata.T_VERSION = ''YTD''
+      AND alldata.T_REPORTING = ''FPNA'' AND alldata.M_ACCOUNT_0 = ''Income'' AND alldata.M_ACCOUNT_1 = ''Net Interest Income'' AND dateconfig.FILTER_DATE = ''2025-08-01'' AND dateconfig.FILTER_TYPE = ''PYR+CYR''
+  ),
+  YTDactualPY_cfx AS (
+    SELECT SUM(alldata.CFX) AS val FROM "T1NFRP_PHY"."CV_UP_NFRP_ALLDATA" alldata
+    INNER JOIN "T1NFRP_PHY"."TBL_NFRP_DATE_CONFIG" dateconfig
+      ON alldata.E_PERIOD_DATE = dateconfig.E_PERIOD_DATE
+    WHERE alldata.DATA_TYPE = ''Actuals'' AND dateconfig.ADD6 = ''PY_YTD'' AND alldata.T_VERSION = ''MTD''
+      AND alldata.T_REPORTING = ''FPNA'' AND alldata.M_ACCOUNT_0 = ''Income'' AND alldata.M_ACCOUNT_1 = ''Net Interest Income'' AND dateconfig.FILTER_DATE = ''2025-08-01'' AND dateconfig.FILTER_TYPE = ''PYR+CYR''
+  ),
+  CYPQactuals_rfx AS (
+    SELECT SUM(alldata.RFX) AS val FROM "T1NFRP_PHY"."CV_UP_NFRP_ALLDATA" alldata
+    INNER JOIN "T1NFRP_PHY"."TBL_NFRP_DATE_CONFIG" dateconfig
+      ON alldata.E_PERIOD_DATE = dateconfig.E_PERIOD_DATE
+    WHERE alldata.DATA_TYPE = ''Actuals'' AND dateconfig.ADD17 = -1 AND alldata.T_VERSION = ''QTD''
+      AND alldata.T_REPORTING = ''FPNA'' AND alldata.M_ACCOUNT_0 = ''Income'' AND alldata.M_ACCOUNT_1 = ''Net Interest Income'' AND dateconfig.FILTER_DATE = ''2025-08-01'' AND dateconfig.FILTER_TYPE = ''PYR+CYR''
+  ),
+  PYPQactuals_rfx AS (
+    SELECT SUM(alldata.RFX) AS val FROM "T1NFRP_PHY"."CV_UP_NFRP_ALLDATA" alldata
+    INNER JOIN "T1NFRP_PHY"."TBL_NFRP_DATE_CONFIG" dateconfig
+      ON alldata.E_PERIOD_DATE = dateconfig.E_PERIOD_DATE
+    WHERE alldata.DATA_TYPE = ''Actuals'' AND dateconfig.ADD17 = -5 AND alldata.T_VERSION = ''QTD''
+      AND alldata.T_REPORTING = ''FPNA'' AND alldata.M_ACCOUNT_0 = ''Income'' AND alldata.M_ACCOUNT_1 = ''Net Interest Income'' AND dateconfig.FILTER_DATE = ''2025-08-01'' AND dateconfig.FILTER_TYPE = ''PYR+CYR''
+  ),
+  CYPQactuals_cfx AS (
+    SELECT SUM(alldata.CFX) AS val FROM "T1NFRP_PHY"."CV_UP_NFRP_ALLDATA" alldata
+    INNER JOIN "T1NFRP_PHY"."TBL_NFRP_DATE_CONFIG" dateconfig
+      ON alldata.E_PERIOD_DATE = dateconfig.E_PERIOD_DATE
+    WHERE alldata.DATA_TYPE = ''Actuals'' AND dateconfig.ADD17 = -1 AND alldata.T_VERSION = ''QTD''
+      AND alldata.T_REPORTING = ''FPNA'' AND alldata.M_ACCOUNT_0 = ''Income'' AND alldata.M_ACCOUNT_1 = ''Net Interest Income'' AND dateconfig.FILTER_DATE = ''2025-08-01'' AND dateconfig.FILTER_TYPE = ''PYR+CYR''
+  ),
+  PYPQactuals_cfx AS (
+    SELECT SUM(alldata.CFX) AS val FROM "T1NFRP_PHY"."CV_UP_NFRP_ALLDATA" alldata
+    INNER JOIN "T1NFRP_PHY"."TBL_NFRP_DATE_CONFIG" dateconfig
+      ON alldata.E_PERIOD_DATE = dateconfig.E_PERIOD_DATE
+    WHERE alldata.DATA_TYPE = ''Actuals'' AND dateconfig.ADD17 = -5 AND alldata.T_VERSION = ''QTD''
+      AND alldata.T_REPORTING = ''FPNA'' AND alldata.M_ACCOUNT_0 = ''Income'' AND alldata.M_ACCOUNT_1 = ''Net Interest Income'' AND dateconfig.FILTER_DATE = ''2025-08-01'' AND dateconfig.FILTER_TYPE = ''PYR+CYR''
+  ),
+  FYoutlook_rfx AS (
+    SELECT SUM(alldata.RFX) AS val FROM "T1NFRP_PHY"."CV_UP_NFRP_ALLDATA" alldata
+    INNER JOIN "T1NFRP_PHY"."TBL_NFRP_DATE_CONFIG" dateconfig
+      ON alldata.E_PERIOD_DATE = dateconfig.E_PERIOD_DATE
+    WHERE alldata.DATA_TYPE = ''Outlook_PM'' AND alldata.T_VERSION = ''YTD'' AND alldata.MONTH_ABR = ''Feb'' AND dateconfig.ADD19 = ''CY''
+      AND alldata.T_REPORTING = ''FPNA'' AND alldata.M_ACCOUNT_0 = ''Income'' AND alldata.M_ACCOUNT_1 = ''Net Interest Income'' AND dateconfig.FILTER_DATE = ''2025-08-01'' AND dateconfig.FILTER_TYPE = ''PYR+CYR''
+  ),
+  PYYTDactuals_rfx AS (
+    SELECT SUM(alldata.RFX) AS val FROM "T1NFRP_PHY"."CV_UP_NFRP_ALLDATA" alldata
+    INNER JOIN "T1NFRP_PHY"."TBL_NFRP_DATE_CONFIG" dateconfig
+      ON alldata.E_PERIOD_DATE = dateconfig.E_PERIOD_DATE
+    WHERE alldata.DATA_TYPE = ''Actuals'' AND dateconfig.ADD6 = ''PY_YTD'' AND alldata.T_VERSION = ''MTD''
+      AND alldata.T_REPORTING = ''FPNA'' AND alldata.M_ACCOUNT_0 = ''Income'' AND alldata.M_ACCOUNT_1 = ''Net Interest Income'' AND dateconfig.FILTER_DATE = ''2025-08-01'' AND dateconfig.FILTER_TYPE = ''PYR+CYR''
+  ),
+  FYoutlook_cfx AS (
+    SELECT SUM(alldata.CFX) AS val FROM "T1NFRP_PHY"."CV_UP_NFRP_ALLDATA" alldata
+    INNER JOIN "T1NFRP_PHY"."TBL_NFRP_DATE_CONFIG" dateconfig
+      ON alldata.E_PERIOD_DATE = dateconfig.E_PERIOD_DATE
+    WHERE alldata.DATA_TYPE = ''Outlook_PM'' AND alldata.T_VERSION = ''YTD'' AND alldata.MONTH_ABR = ''Feb'' AND dateconfig.ADD19 = ''CY''
+      AND alldata.T_REPORTING = ''FPNA'' AND alldata.M_ACCOUNT_0 = ''Income'' AND alldata.M_ACCOUNT_1 = ''Net Interest Income'' AND dateconfig.FILTER_DATE = ''2025-08-01'' AND dateconfig.FILTER_TYPE = ''PYR+CYR''
+  ),
+  PYYTDactuals_cfx AS (
+    SELECT SUM(alldata.CFX) AS val FROM "T1NFRP_PHY"."CV_UP_NFRP_ALLDATA" alldata
+    INNER JOIN "T1NFRP_PHY"."TBL_NFRP_DATE_CONFIG" dateconfig
+      ON alldata.E_PERIOD_DATE = dateconfig.E_PERIOD_DATE
+    WHERE alldata.DATA_TYPE = ''Actuals'' AND dateconfig.ADD6 = ''PY_YTD'' AND alldata.T_VERSION = ''MTD''
+      AND alldata.T_REPORTING = ''FPNA'' AND alldata.M_ACCOUNT_0 = ''Income'' AND alldata.M_ACCOUNT_1 = ''Net Interest Income'' AND dateconfig.FILTER_DATE = ''2025-08-01'' AND dateconfig.FILTER_TYPE = ''PYR+CYR''
+  )
+SELECT
+  -- YTD ACTUALS (FPNA)
+  SUM(CASE WHEN alldata.DATA_TYPE = ''Actuals'' AND alldata.T_VERSION = ''YTD'' AND dateconfig.ADD16 = 0 THEN alldata.RFX ELSE 0 END) AS YTD_ACTUALS_RFX_FPNA,
+  SUM(CASE WHEN alldata.DATA_TYPE = ''Actuals'' AND alldata.T_VERSION = ''YTD'' AND dateconfig.ADD16 = 0 THEN alldata.CFX ELSE 0 END) AS YTD_ACTUALS_CFX_FPNA,
+
+  -- Vs Budget (FPNA)
+  SUM(CASE WHEN alldata.DATA_TYPE = ''Actuals'' AND alldata.T_VERSION = ''YTD'' AND dateconfig.ADD16 = 0 THEN alldata.RFX ELSE 0 END)
+  - SUM(CASE WHEN alldata.DATA_TYPE = ''Budget'' AND alldata.T_VERSION = ''YTD'' AND dateconfig.ADD16 = 0 THEN alldata.RFX ELSE 0 END) AS VS_BUDGET_RFX_FPNA,
+  SUM(CASE WHEN alldata.DATA_TYPE = ''Actuals'' AND alldata.T_VERSION = ''YTD'' AND dateconfig.ADD16 = 0 THEN alldata.CFX ELSE 0 END)
+  - SUM(CASE WHEN alldata.DATA_TYPE = ''Budget'' AND alldata.T_VERSION = ''YTD'' AND dateconfig.ADD16 = 0 THEN alldata.CFX ELSE 0 END) AS VS_BUDGET_CFX_FPNA,
+
+  -- PQTD Actuals (FPNA)
+  SUM(CASE WHEN alldata.DATA_TYPE = ''Actuals'' AND alldata.T_VERSION = ''QTD'' AND dateconfig.ADD17 = -1 THEN alldata.RFX ELSE 0 END) AS PQTD_ACTUALS_RFX_FPNA,
+  SUM(CASE WHEN alldata.DATA_TYPE = ''Actuals'' AND alldata.T_VERSION = ''QTD'' AND dateconfig.ADD17 = -1 THEN alldata.CFX ELSE 0 END) AS PQTD_ACTUALS_CFX_FPNA,
+
+  -- FY OUTLOOK (FPNA)
+  SUM(CASE WHEN alldata.DATA_TYPE = ''Outlook_PM'' AND alldata.T_VERSION = ''YTD'' AND dateconfig.ADD19 = ''CY'' AND alldata.MONTH_ABR = ''Feb'' THEN alldata.RFX ELSE 0 END) AS FY_OUTLOOK_RFX_FPNA,
+  SUM(CASE WHEN alldata.DATA_TYPE = ''Outlook_PM'' AND alldata.T_VERSION = ''YTD'' AND dateconfig.ADD19 = ''CY'' AND alldata.MONTH_ABR = ''Feb'' THEN alldata.CFX ELSE 0 END) AS FY_OUTLOOK_CFX_FPNA,
+
+  -- Variance (YTD Actual PY, FPNA) as percentage (A-B)/abs(B)*100
+  CASE WHEN (SELECT val FROM YTDactualPY_rfx) != 0
+    THEN ((SELECT val FROM YTDactuals_rfx) - (SELECT val FROM YTDactualPY_rfx)) / ABS((SELECT val FROM YTDactualPY_rfx)) * 100
+    ELSE NULL END AS VARIANCE_YTD_Actual_RFX_FPNA,
+  CASE WHEN (SELECT val FROM YTDactualPY_cfx) != 0
+    THEN ((SELECT val FROM YTDactuals_cfx) - (SELECT val FROM YTDactualPY_cfx)) / ABS((SELECT val FROM YTDactualPY_cfx)) * 100
+    ELSE NULL END AS VARIANCE_YTD_Actual_CFX_FPNA,
+
+  -- PYPQ Actuals (FPNA) as percentage (A-B)/abs(B)*100
+  CASE WHEN (SELECT val FROM PYPQactuals_rfx) != 0
+    THEN ((SELECT val FROM CYPQactuals_rfx) - (SELECT val FROM PYPQactuals_rfx)) / ABS((SELECT val FROM PYPQactuals_rfx)) * 100
+    ELSE NULL END AS PYPQ_ACTUALS_RFX_FPNA,
+  CASE WHEN (SELECT val FROM PYPQactuals_cfx) != 0
+    THEN ((SELECT val FROM CYPQactuals_cfx) - (SELECT val FROM PYPQactuals_cfx)) / ABS((SELECT val FROM PYPQactuals_cfx)) * 100
+    ELSE NULL END AS PYPQ_ACTUALS_CFX_FPNA,
+
+  -- PY_YTD Actuals (FPNA) as percentage (A-B)/abs(B)*100
+  CASE WHEN (SELECT val FROM PYYTDactuals_rfx) != 0
+    THEN ((SELECT val FROM FYoutlook_rfx) - (SELECT val FROM PYYTDactuals_rfx)) / ABS((SELECT val FROM PYYTDactuals_rfx)) * 100
+    ELSE NULL END AS PY_YTD_ACTUALS_RFX_FPNA,
+  CASE WHEN (SELECT val FROM PYYTDactuals_cfx) != 0
+    THEN ((SELECT val FROM FYoutlook_cfx) - (SELECT val FROM PYYTDactuals_cfx)) / ABS((SELECT val FROM PYYTDactuals_cfx)) * 100
+    ELSE NULL END AS PY_YTD_ACTUALS_CFX_FPNA
+
+FROM "T1NFRP_PHY"."CV_UP_NFRP_ALLDATA" alldata
+INNER JOIN "T1NFRP_PHY"."TBL_NFRP_DATE_CONFIG" dateconfig
+  ON alldata.E_PERIOD_DATE = dateconfig.E_PERIOD_DATE
+WHERE
+  alldata.T_REPORTING = ''FPNA''
+  AND alldata.M_ACCOUNT_0 = ''Income''
+  AND alldata.M_ACCOUNT_1 = ''Net Interest Income''
+  AND dateconfig.FILTER_DATE = ''2025-08-01''
+  AND dateconfig.FILTER_TYPE = ''PYR+CYR''
+  AND (
+    (alldata.DATA_TYPE = ''Actuals'' AND alldata.T_VERSION = ''YTD'' AND dateconfig.ADD16 = 0)
+    OR
+    (alldata.DATA_TYPE = ''Budget'' AND alldata.T_VERSION = ''YTD'' AND dateconfig.ADD16 = 0)
+    OR
+    (alldata.DATA_TYPE = ''Actuals'' AND alldata.T_VERSION = ''QTD'' AND dateconfig.ADD17 = -1)
+    OR
+    (alldata.DATA_TYPE = ''Outlook_PM'' AND alldata.T_VERSION = ''YTD'' AND dateconfig.ADD19 = ''CY'' AND alldata.MONTH_ABR = ''Feb'')
+    OR
+    (alldata.DATA_TYPE = ''Outlook_PM'' AND alldata.T_VERSION = ''YTD'' AND alldata.MONTH_ABR = ''Feb'' AND (dateconfig.ADD19 = ''CY'' OR dateconfig.ADD19 = ''PY''))
+    OR
+    (alldata.DATA_TYPE = ''Actuals'' AND dateconfig.ADD17 = -1 AND alldata.T_VERSION = ''QTD'')
+    OR
+    (alldata.DATA_TYPE = ''Actuals'' AND dateconfig.ADD17 = -5 AND alldata.T_VERSION = ''MTD'')
+    OR
+    (alldata.DATA_TYPE = ''Actuals'' AND dateconfig.ADD16 = 0 AND alldata.T_VERSION = ''YTD'')
+    OR
+    (alldata.DATA_TYPE = ''Actuals'' AND dateconfig.ADD6 = ''PY_YTD'' AND alldata.T_VERSION = ''MTD'')
+  )
+'
+WHERE ID = 7;
+
+
+-- ============================================================
+-- 8. Costs (ID = 6)
+-- ============================================================
+UPDATE "T1GDTL_PHY"."NRFP_FINANCIALS_REPORTINGMASTER"
+SET QUERY = '
+WITH
+  CYPQactuals_rfx AS (
+    SELECT SUM(alldata.RFX) AS val FROM "T1NFRP_PHY"."CV_UP_NFRP_ALLDATA" alldata
+    INNER JOIN "T1NFRP_PHY"."TBL_NFRP_DATE_CONFIG" dateconfig
+      ON alldata.E_PERIOD_DATE = dateconfig.E_PERIOD_DATE
+    WHERE alldata.DATA_TYPE = ''Actuals'' AND dateconfig.ADD17 = -1 AND alldata.T_VERSION = ''QTD''
+      AND alldata.T_REPORTING = ''FPNA'' AND alldata.M_ACCOUNT_0 = ''Total Cost'' AND dateconfig.FILTER_DATE = ''2025-08-01'' AND dateconfig.FILTER_TYPE = ''PYR+CYR''
+  ),
+  PYPQactuals_rfx AS (
+    SELECT SUM(alldata.RFX) AS val FROM "T1NFRP_PHY"."CV_UP_NFRP_ALLDATA" alldata
+    INNER JOIN "T1NFRP_PHY"."TBL_NFRP_DATE_CONFIG" dateconfig
+      ON alldata.E_PERIOD_DATE = dateconfig.E_PERIOD_DATE
+    WHERE alldata.DATA_TYPE = ''Actuals'' AND dateconfig.ADD17 = -5 AND alldata.T_VERSION = ''QTD''
+      AND alldata.T_REPORTING = ''FPNA'' AND alldata.M_ACCOUNT_0 = ''Total Cost'' AND dateconfig.FILTER_DATE = ''2025-08-01'' AND dateconfig.FILTER_TYPE = ''PYR+CYR''
+  ),
+  CYPQactuals_cfx AS (
+    SELECT SUM(alldata.CFX) AS val FROM "T1NFRP_PHY"."CV_UP_NFRP_ALLDATA" alldata
+    INNER JOIN "T1NFRP_PHY"."TBL_NFRP_DATE_CONFIG" dateconfig
+      ON alldata.E_PERIOD_DATE = dateconfig.E_PERIOD_DATE
+    WHERE alldata.DATA_TYPE = ''Actuals'' AND dateconfig.ADD17 = -1 AND alldata.T_VERSION = ''QTD''
+      AND alldata.T_REPORTING = ''FPNA'' AND alldata.M_ACCOUNT_0 = ''Total Cost'' AND dateconfig.FILTER_DATE = ''2025-08-01'' AND dateconfig.FILTER_TYPE = ''PYR+CYR''
+  ),
+  PYPQactuals_cfx AS (
+    SELECT SUM(alldata.CFX) AS val FROM "T1NFRP_PHY"."CV_UP_NFRP_ALLDATA" alldata
+    INNER JOIN "T1NFRP_PHY"."TBL_NFRP_DATE_CONFIG" dateconfig
+      ON alldata.E_PERIOD_DATE = dateconfig.E_PERIOD_DATE
+    WHERE alldata.DATA_TYPE = ''Actuals'' AND dateconfig.ADD17 = -5 AND alldata.T_VERSION = ''QTD''
+      AND alldata.T_REPORTING = ''FPNA'' AND alldata.M_ACCOUNT_0 = ''Total Cost'' AND dateconfig.FILTER_DATE = ''2025-08-01'' AND dateconfig.FILTER_TYPE = ''PYR+CYR''
+  ),
+  YTDactuals_rfx AS (
+    SELECT SUM(alldata.RFX) AS val FROM "T1NFRP_PHY"."CV_UP_NFRP_ALLDATA" alldata
+    INNER JOIN "T1NFRP_PHY"."TBL_NFRP_DATE_CONFIG" dateconfig
+      ON alldata.E_PERIOD_DATE = dateconfig.E_PERIOD_DATE
+    WHERE alldata.DATA_TYPE = ''Actuals'' AND dateconfig.ADD16 = 0 AND alldata.T_VERSION = ''YTD''
+      AND alldata.T_REPORTING = ''FPNA'' AND alldata.M_ACCOUNT_0 = ''Total Cost'' AND dateconfig.FILTER_DATE = ''2025-08-01'' AND dateconfig.FILTER_TYPE = ''PYR+CYR''
+  ),
+  YTDactualPY_rfx AS (
+    SELECT SUM(alldata.RFX) AS val FROM "T1NFRP_PHY"."CV_UP_NFRP_ALLDATA" alldata
+    INNER JOIN "T1NFRP_PHY"."TBL_NFRP_DATE_CONFIG" dateconfig
+      ON alldata.E_PERIOD_DATE = dateconfig.E_PERIOD_DATE
+    WHERE alldata.DATA_TYPE = ''Actuals'' AND dateconfig.ADD6 = ''PY_YTD'' AND alldata.T_VERSION = ''MTD''
+      AND alldata.T_REPORTING = ''FPNA'' AND alldata.M_ACCOUNT_0 = ''Total Cost'' AND dateconfig.FILTER_DATE = ''2025-08-01'' AND dateconfig.FILTER_TYPE = ''PYR+CYR''
+  ),
+  YTDactuals_cfx AS (
+    SELECT SUM(alldata.CFX) AS val FROM "T1NFRP_PHY"."CV_UP_NFRP_ALLDATA" alldata
+    INNER JOIN "T1NFRP_PHY"."TBL_NFRP_DATE_CONFIG" dateconfig
+      ON alldata.E_PERIOD_DATE = dateconfig.E_PERIOD_DATE
+    WHERE alldata.DATA_TYPE = ''Actuals'' AND dateconfig.ADD16 = 0 AND alldata.T_VERSION = ''YTD''
+      AND alldata.T_REPORTING = ''FPNA'' AND alldata.M_ACCOUNT_0 = ''Total Cost'' AND dateconfig.FILTER_DATE = ''2025-08-01'' AND dateconfig.FILTER_TYPE = ''PYR+CYR''
+  ),
+  YTDactualPY_cfx AS (
+    SELECT SUM(alldata.CFX) AS val FROM "T1NFRP_PHY"."CV_UP_NFRP_ALLDATA" alldata
+    INNER JOIN "T1NFRP_PHY"."TBL_NFRP_DATE_CONFIG" dateconfig
+      ON alldata.E_PERIOD_DATE = dateconfig.E_PERIOD_DATE
+    WHERE alldata.DATA_TYPE = ''Actuals'' AND dateconfig.ADD6 = ''PY_YTD'' AND alldata.T_VERSION = ''MTD''
+      AND alldata.T_REPORTING = ''FPNA'' AND alldata.M_ACCOUNT_0 = ''Total Cost'' AND dateconfig.FILTER_DATE = ''2025-08-01'' AND dateconfig.FILTER_TYPE = ''PYR+CYR''
+  ),
+  FYoutlook_rfx AS (
+    SELECT SUM(alldata.RFX) AS val FROM "T1NFRP_PHY"."CV_UP_NFRP_ALLDATA" alldata
+    INNER JOIN "T1NFRP_PHY"."TBL_NFRP_DATE_CONFIG" dateconfig
+      ON alldata.E_PERIOD_DATE = dateconfig.E_PERIOD_DATE
+    WHERE alldata.DATA_TYPE = ''Outlook_PM'' AND alldata.T_VERSION = ''YTD'' AND alldata.MONTH_ABR = ''Feb'' AND dateconfig.ADD19 = ''CY''
+      AND alldata.T_REPORTING = ''FPNA'' AND alldata.M_ACCOUNT_0 = ''Total Cost'' AND dateconfig.FILTER_DATE = ''2025-08-01'' AND dateconfig.FILTER_TYPE = ''PYR+CYR''
+  ),
+  FYoutlook_cfx AS (
+    SELECT SUM(alldata.CFX) AS val FROM "T1NFRP_PHY"."CV_UP_NFRP_ALLDATA" alldata
+    INNER JOIN "T1NFRP_PHY"."TBL_NFRP_DATE_CONFIG" dateconfig
+      ON alldata.E_PERIOD_DATE = dateconfig.E_PERIOD_DATE
+    WHERE alldata.DATA_TYPE = ''Outlook_PM'' AND alldata.T_VERSION = ''YTD'' AND alldata.MONTH_ABR = ''Feb'' AND dateconfig.ADD19 = ''CY''
+      AND alldata.T_REPORTING = ''FPNA'' AND alldata.M_ACCOUNT_0 = ''Total Cost'' AND dateconfig.FILTER_DATE = ''2025-08-01'' AND dateconfig.FILTER_TYPE = ''PYR+CYR''
+  )
+SELECT
+  -- YTD ACTUALS (FPNA)
+  SUM(CASE WHEN alldata.DATA_TYPE = ''Actuals'' AND alldata.T_VERSION = ''YTD'' AND dateconfig.ADD16 = 0 THEN alldata.RFX ELSE 0 END) AS YTD_ACTUALS_RFX_FPNA,
+  SUM(CASE WHEN alldata.DATA_TYPE = ''Actuals'' AND alldata.T_VERSION = ''YTD'' AND dateconfig.ADD16 = 0 THEN alldata.CFX ELSE 0 END) AS YTD_ACTUALS_CFX_FPNA,
+
+  -- Vs Budget (FPNA)
+  SUM(CASE WHEN alldata.DATA_TYPE = ''Actuals'' AND alldata.T_VERSION = ''YTD'' AND dateconfig.ADD16 = 0 THEN alldata.RFX ELSE 0 END)
+  - SUM(CASE WHEN alldata.DATA_TYPE = ''Budget'' AND alldata.T_VERSION = ''YTD'' AND dateconfig.ADD16 = 0 THEN alldata.RFX ELSE 0 END) AS VS_BUDGET_RFX_FPNA,
+  SUM(CASE WHEN alldata.DATA_TYPE = ''Actuals'' AND alldata.T_VERSION = ''YTD'' AND dateconfig.ADD16 = 0 THEN alldata.CFX ELSE 0 END)
+  - SUM(CASE WHEN alldata.DATA_TYPE = ''Budget'' AND alldata.T_VERSION = ''YTD'' AND dateconfig.ADD16 = 0 THEN alldata.CFX ELSE 0 END) AS VS_BUDGET_CFX_FPNA,
+
+  -- PQTD Actuals (FPNA)
+  SUM(CASE WHEN alldata.DATA_TYPE = ''Actuals'' AND alldata.T_VERSION = ''QTD'' AND dateconfig.ADD17 = -1 THEN alldata.RFX ELSE 0 END) AS PQTD_ACTUALS_RFX_FPNA,
+  SUM(CASE WHEN alldata.DATA_TYPE = ''Actuals'' AND alldata.T_VERSION = ''QTD'' AND dateconfig.ADD17 = -1 THEN alldata.CFX ELSE 0 END) AS PQTD_ACTUALS_CFX_FPNA,
+
+  -- FY OUTLOOK (FPNA)
+  SUM(CASE WHEN alldata.DATA_TYPE = ''Outlook_PM'' AND alldata.T_VERSION = ''YTD'' AND dateconfig.ADD19 = ''CY'' AND alldata.MONTH_ABR = ''Feb'' THEN alldata.RFX ELSE 0 END) AS FY_OUTLOOK_RFX_FPNA,
+  SUM(CASE WHEN alldata.DATA_TYPE = ''Outlook_PM'' AND alldata.T_VERSION = ''YTD'' AND dateconfig.ADD19 = ''CY'' AND alldata.MONTH_ABR = ''Feb'' THEN alldata.CFX ELSE 0 END) AS FY_OUTLOOK_CFX_FPNA,
+
+  -- Variance (PYPQ Actuals, FPNA) as percentage (A-B)/abs(B)*100
+  CASE WHEN (SELECT val FROM PYPQactuals_rfx) != 0
+    THEN ((SELECT val FROM CYPQactuals_rfx) - (SELECT val FROM PYPQactuals_rfx)) / ABS((SELECT val FROM PYPQactuals_rfx)) * 100
+    ELSE NULL END AS VARIANCE_PYPQ_Actuals_RFX_FPNA,
+  CASE WHEN (SELECT val FROM PYPQactuals_cfx) != 0
+    THEN ((SELECT val FROM CYPQactuals_cfx) - (SELECT val FROM PYPQactuals_cfx)) / ABS((SELECT val FROM PYPQactuals_cfx)) * 100
+    ELSE NULL END AS VARIANCE_PYPQ_Actuals_CFX_FPNA,
+
+  -- YTD Actual PY (FPNA) as percentage (A-B)/abs(B)*100
+  CASE WHEN (SELECT val FROM YTDactualPY_rfx) != 0
+    THEN ((SELECT val FROM YTDactuals_rfx) - (SELECT val FROM YTDactualPY_rfx)) / ABS((SELECT val FROM YTDactualPY_rfx)) * 100
+    ELSE NULL END AS YTD_ACTUAL_RFX_FPNA,
+  CASE WHEN (SELECT val FROM YTDactualPY_cfx) != 0
+    THEN ((SELECT val FROM YTDactuals_cfx) - (SELECT val FROM YTDactualPY_cfx)) / ABS((SELECT val FROM YTDactualPY_cfx)) * 100
+    ELSE NULL END AS YTD_ACTUAL_CFX_FPNA,
+
+  -- YTD Actual PY (FPNA) as percentage (A-B)/abs(B)*100
+  CASE WHEN (SELECT val FROM YTDactualPY_rfx) != 0
+    THEN ((SELECT val FROM FYoutlook_rfx) - (SELECT val FROM YTDactualPY_rfx)) / ABS((SELECT val FROM YTDactualPY_rfx)) * 100
+    ELSE NULL END AS YTD_ACTUAL_2_RFX_FPNA,
+  CASE WHEN (SELECT val FROM YTDactualPY_cfx) != 0
+    THEN ((SELECT val FROM FYoutlook_cfx) - (SELECT val FROM YTDactualPY_cfx)) / ABS((SELECT val FROM YTDactualPY_cfx)) * 100
+    ELSE NULL END AS YTD_ACTUAL_2_CFX_FPNA
+
+FROM "T1NFRP_PHY"."CV_UP_NFRP_ALLDATA" alldata
+INNER JOIN "T1NFRP_PHY"."TBL_NFRP_DATE_CONFIG" dateconfig
+  ON alldata.E_PERIOD_DATE = dateconfig.E_PERIOD_DATE
+WHERE
+  alldata.T_REPORTING = ''FPNA''
+  AND alldata.M_ACCOUNT_0 = ''Total Cost''
+  AND dateconfig.FILTER_DATE = ''2025-08-01''
+  AND dateconfig.FILTER_TYPE = ''PYR+CYR''
+  AND (
+    (alldata.DATA_TYPE = ''Actuals'' AND alldata.T_VERSION = ''YTD'' AND dateconfig.ADD16 = 0)
+    OR
+    (alldata.DATA_TYPE = ''Budget'' AND alldata.T_VERSION = ''YTD'' AND dateconfig.ADD16 = 0)
+    OR
+    (alldata.DATA_TYPE = ''Actuals'' AND alldata.T_VERSION = ''QTD'' AND dateconfig.ADD17 = -1)
+    OR
+    (alldata.DATA_TYPE = ''Outlook_PM'' AND alldata.T_VERSION = ''YTD'' AND dateconfig.ADD19 = ''CY'' AND alldata.MONTH_ABR = ''Feb'')
+    OR
+    (alldata.DATA_TYPE = ''Outlook_PM'' AND alldata.T_VERSION = ''YTD'' AND alldata.MONTH_ABR = ''Feb'' AND (dateconfig.ADD19 = ''CY'' OR dateconfig.ADD19 = ''PY''))
+    OR
+    (alldata.DATA_TYPE = ''Actuals'' AND dateconfig.ADD17 = -1 AND alldata.T_VERSION = ''QTD'')
+    OR
+    (alldata.DATA_TYPE = ''Actuals'' AND dateconfig.ADD17 = -5 AND alldata.T_VERSION = ''MTD'')
+    OR
+    (alldata.DATA_TYPE = ''Actuals'' AND dateconfig.ADD16 = 0 AND alldata.T_VERSION = ''YTD'')
+    OR
+    (alldata.DATA_TYPE = ''Actuals'' AND dateconfig.ADD6 = ''PY_YTD'' AND alldata.T_VERSION = ''MTD'')
+  )
+'
+WHERE ID = 6;
+
+
+
+
+
+
+
+-- ============================================================
+-- 1. Underlying Profit (ID = 3)
+-- ============================================================
+UPDATE "T1GDTL_PHY"."NRFP_FINANCIALS_REPORTINGMASTER"
+SET QUERY = '
+-- ============================================================
+-- UNDERLYING PROFIT - ALL METRICS IN ONE QUERY
+-- ============================================================
+
+WITH
+
+-- 1. YTD ACTUALS
+YTD_ACTUALS AS (
+    SELECT
+        SUM(CFX) AS YTD_ACTUALS_CFX,
+        SUM(RFX) AS YTD_ACTUALS_RFX
+    FROM "T1NFRP_PHY"."CV_UP_NFRP_ALLDATA" A
+    JOIN "T1NFRP_PHY"."TBL_NFRP_DATE_CONFIG" D
+        ON A.E_PERIOD_DATE = D.E_PERIOD_DATE
+    WHERE A.DATA_TYPE = ''Actuals''
+    AND A.T_VERSION = ''YTD''
+    AND A.M_ACCOUNT_0 = ''Operating Profit''
+    AND A.T_REPORTING = ''CIB''
+    AND D.ADD16 = 0
+    AND D.FILTER_DATE = ''CURRENT_MONTH''
+    AND D.FILTER_TYPE = ''PYR+CYR''
+),
+
+-- 2. VS BUDGET VARIANCE: (Actuals - Budget) / |Budget| * 100
+VS_BUDGET AS (
+    SELECT
+        CASE
+            WHEN SUM(CASE WHEN A.DATA_TYPE = ''Budget'' AND D.ADD16 = 0 THEN CFX ELSE 0 END) = 0 THEN NULL
+            ELSE (
+                SUM(CASE WHEN A.DATA_TYPE = ''Actuals'' AND D.ADD16 = 0 THEN CFX ELSE 0 END) -
+                SUM(CASE WHEN A.DATA_TYPE = ''Budget''  AND D.ADD16 = 0 THEN CFX ELSE 0 END)
+            ) / ABS(SUM(CASE WHEN A.DATA_TYPE = ''Budget'' AND D.ADD16 = 0 THEN CFX ELSE 0 END)) * 100
+        END AS VS_BUDGET_CFX_VARIANCE,
+        CASE
+            WHEN SUM(CASE WHEN A.DATA_TYPE = ''Budget'' AND D.ADD16 = 0 THEN RFX ELSE 0 END) = 0 THEN NULL
+            ELSE (
+                SUM(CASE WHEN A.DATA_TYPE = ''Actuals'' AND D.ADD16 = 0 THEN RFX ELSE 0 END) -
+                SUM(CASE WHEN A.DATA_TYPE = ''Budget''  AND D.ADD16 = 0 THEN RFX ELSE 0 END)
+            ) / ABS(SUM(CASE WHEN A.DATA_TYPE = ''Budget'' AND D.ADD16 = 0 THEN RFX ELSE 0 END)) * 100
+        END AS VS_BUDGET_RFX_VARIANCE
+    FROM "T1NFRP_PHY"."CV_UP_NFRP_ALLDATA" A
+    JOIN "T1NFRP_PHY"."TBL_NFRP_DATE_CONFIG" D
+        ON A.E_PERIOD_DATE = D.E_PERIOD_DATE
+    WHERE A.DATA_TYPE IN (''Actuals'', ''Budget'')
+    AND A.T_VERSION = ''YTD''
+    AND A.M_ACCOUNT_0 = ''Operating Profit''
+    AND A.T_REPORTING = ''CIB''
+    AND D.FILTER_DATE = ''CURRENT_MONTH''
+    AND D.FILTER_TYPE = ''PYR+CYR''
+),
+
+-- 3. CY PQ ACTUALS
+CY_PQ_ACTUALS AS (
+    SELECT
+        SUM(CFX) AS CY_PQ_ACTUALS_CFX,
+        SUM(RFX) AS CY_PQ_ACTUALS_RFX
+    FROM "T1NFRP_PHY"."CV_UP_NFRP_ALLDATA" A
+    JOIN "T1NFRP_PHY"."TBL_NFRP_DATE_CONFIG" D
+        ON A.E_PERIOD_DATE = D.E_PERIOD_DATE
+    WHERE A.DATA_TYPE = ''Actuals''
+    AND A.T_VERSION = ''QTD''
+    AND A.M_ACCOUNT_0 = ''Operating Profit''
+    AND A.T_REPORTING = ''CIB''
+    AND D.ADD17 = -1
+    AND D.FILTER_DATE = ''CURRENT_MONTH''
+    AND D.FILTER_TYPE = ''PYR+CYR''
+),
+
+-- 4. FY OUTLOOK
+FY_OUTLOOK AS (
+    SELECT
+        SUM(CFX) AS FY_OUTLOOK_CFX,
+        SUM(RFX) AS FY_OUTLOOK_RFX
+    FROM "T1NFRP_PHY"."CV_UP_NFRP_ALLDATA" A
+    JOIN "T1NFRP_PHY"."TBL_NFRP_DATE_CONFIG" D
+        ON A.E_PERIOD_DATE = D.E_PERIOD_DATE
+    WHERE A.DATA_TYPE = ''Outlook_PM''
+    AND A.T_VERSION = ''YTD''
+    AND A.M_ACCOUNT_0 = ''Operating Profit''
+    AND A.T_REPORTING = ''CIB''
+    AND A.MONTH_ABR = ''FY''
+    AND D.ADD18 = -1
+    AND D.FILTER_DATE = ''CURRENT_MONTH''
+    AND D.FILTER_TYPE = ''PYR+CYR''
+),
+
+-- 5. PY PQ VARIANCE: (CY PQ - PY PQ) / |PY PQ| * 100
+PY_PQ_ACTUALS AS (
+    SELECT
+        CASE
+            WHEN SUM(CASE WHEN D.ADD17 = -4 THEN CFX ELSE 0 END) = 0 THEN NULL
+            ELSE (
+                SUM(CASE WHEN D.ADD17 = -1 THEN CFX ELSE 0 END) -
+                SUM(CASE WHEN D.ADD17 = -4 THEN CFX ELSE 0 END)
+            ) / ABS(SUM(CASE WHEN D.ADD17 = -4 THEN CFX ELSE 0 END)) * 100
+        END AS PY_PQ_CFX_VARIANCE,
+        CASE
+            WHEN SUM(CASE WHEN D.ADD17 = -4 THEN RFX ELSE 0 END) = 0 THEN NULL
+            ELSE (
+                SUM(CASE WHEN D.ADD17 = -1 THEN RFX ELSE 0 END) -
+                SUM(CASE WHEN D.ADD17 = -4 THEN RFX ELSE 0 END)
+            ) / ABS(SUM(CASE WHEN D.ADD17 = -4 THEN RFX ELSE 0 END)) * 100
+        END AS PY_PQ_RFX_VARIANCE
+    FROM "T1NFRP_PHY"."CV_UP_NFRP_ALLDATA" A
+    JOIN "T1NFRP_PHY"."TBL_NFRP_DATE_CONFIG" D
+        ON A.E_PERIOD_DATE = D.E_PERIOD_DATE
+    WHERE A.DATA_TYPE = ''Actuals''
+    AND A.T_VERSION = ''QTD''
+    AND A.M_ACCOUNT_0 = ''Operating Profit''
+    AND A.T_REPORTING = ''CIB''
+    AND D.ADD17 IN (-1, -4)
+    AND D.FILTER_DATE = ''CURRENT_MONTH''
+    AND D.FILTER_TYPE = ''PYR+CYR''
+),
+
+-- 6. YTD ACTUAL PY VARIANCE: (YTD CY - YTD PY) / |YTD PY| * 100
+YTD_ACTUAL_PY AS (
+    SELECT
+        CASE
+            WHEN SUM(CASE WHEN A.T_VERSION = ''MTD'' AND D.ADD6 = ''PY_YTD'' THEN CFX ELSE 0 END) = 0 THEN NULL
+            ELSE (
+                SUM(CASE WHEN A.T_VERSION = ''YTD'' AND D.ADD16 = 0        THEN CFX ELSE 0 END) -
+                SUM(CASE WHEN A.T_VERSION = ''MTD'' AND D.ADD6  = ''PY_YTD'' THEN CFX ELSE 0 END)
+            ) / ABS(SUM(CASE WHEN A.T_VERSION = ''MTD'' AND D.ADD6 = ''PY_YTD'' THEN CFX ELSE 0 END)) * 100
+        END AS YTD_ACTUAL_PY_CFX_VARIANCE,
+        CASE
+            WHEN SUM(CASE WHEN A.T_VERSION = ''MTD'' AND D.ADD6 = ''PY_YTD'' THEN RFX ELSE 0 END) = 0 THEN NULL
+            ELSE (
+                SUM(CASE WHEN A.T_VERSION = ''YTD'' AND D.ADD16 = 0        THEN RFX ELSE 0 END) -
+                SUM(CASE WHEN A.T_VERSION = ''MTD'' AND D.ADD6  = ''PY_YTD'' THEN RFX ELSE 0 END)
+            ) / ABS(SUM(CASE WHEN A.T_VERSION = ''MTD'' AND D.ADD6 = ''PY_YTD'' THEN RFX ELSE 0 END)) * 100
+        END AS YTD_ACTUAL_PY_RFX_VARIANCE
+    FROM "T1NFRP_PHY"."CV_UP_NFRP_ALLDATA" A
+    JOIN "T1NFRP_PHY"."TBL_NFRP_DATE_CONFIG" D
+        ON A.E_PERIOD_DATE = D.E_PERIOD_DATE
+    WHERE A.DATA_TYPE = ''Actuals''
+    AND A.M_ACCOUNT_0 = ''Operating Profit''
+    AND A.T_REPORTING = ''CIB''
+    AND D.FILTER_DATE = ''CURRENT_MONTH''
+    AND D.FILTER_TYPE = ''PYR+CYR''
+),
+
+-- 7. FY OUTLOOK VS YTD ACTUAL PY VARIANCE: (FY Outlook - YTD PY) / |YTD PY| * 100
+FY_OUTLOOK_PY AS (
+    SELECT
+        CASE
+            WHEN SUM(CASE WHEN A.DATA_TYPE = ''Actuals'' AND A.T_VERSION = ''MTD'' AND D.ADD6 = ''PY_YTD'' THEN CFX ELSE 0 END) = 0 THEN NULL
+            ELSE (
+                SUM(CASE WHEN A.DATA_TYPE = ''Outlook_PM'' AND A.T_VERSION = ''YTD'' AND A.MONTH_ABR = ''FY'' AND D.ADD18 = -1 THEN CFX ELSE 0 END) -
+                SUM(CASE WHEN A.DATA_TYPE = ''Actuals''    AND A.T_VERSION = ''MTD'' AND D.ADD6 = ''PY_YTD''                    THEN CFX ELSE 0 END)
+            ) / ABS(SUM(CASE WHEN A.DATA_TYPE = ''Actuals'' AND A.T_VERSION = ''MTD'' AND D.ADD6 = ''PY_YTD'' THEN CFX ELSE 0 END)) * 100
+        END AS FY_OUTLOOK_PY_CFX_VARIANCE,
+        CASE
+            WHEN SUM(CASE WHEN A.DATA_TYPE = ''Actuals'' AND A.T_VERSION = ''MTD'' AND D.ADD6 = ''PY_YTD'' THEN RFX ELSE 0 END) = 0 THEN NULL
+            ELSE (
+                SUM(CASE WHEN A.DATA_TYPE = ''Outlook_PM'' AND A.T_VERSION = ''YTD'' AND A.MONTH_ABR = ''FY'' AND D.ADD18 = -1 THEN RFX ELSE 0 END) -
+                SUM(CASE WHEN A.DATA_TYPE = ''Actuals''    AND A.T_VERSION = ''MTD'' AND D.ADD6 = ''PY_YTD''                    THEN RFX ELSE 0 END)
+            ) / ABS(SUM(CASE WHEN A.DATA_TYPE = ''Actuals'' AND A.T_VERSION = ''MTD'' AND D.ADD6 = ''PY_YTD'' THEN RFX ELSE 0 END)) * 100
+        END AS FY_OUTLOOK_PY_RFX_VARIANCE
+    FROM "T1NFRP_PHY"."CV_UP_NFRP_ALLDATA" A
+    JOIN "T1NFRP_PHY"."TBL_NFRP_DATE_CONFIG" D
+        ON A.E_PERIOD_DATE = D.E_PERIOD_DATE
+    WHERE A.DATA_TYPE IN (''Outlook_PM'', ''Actuals'')
+    AND A.M_ACCOUNT_0 = ''Operating Profit''
+    AND A.T_REPORTING = ''CIB''
+    AND D.FILTER_DATE = ''CURRENT_MONTH''
+    AND D.FILTER_TYPE = ''PYR+CYR''
+)
+
+-- FINAL OUTPUT - ALL METRICS IN ONE ROW
+SELECT
+    -- 1. YTD ACTUALS
+    A.YTD_ACTUALS_CFX,
+    A.YTD_ACTUALS_RFX,
+    -- 2. VS BUDGET VARIANCE
+    B.VS_BUDGET_CFX_VARIANCE,
+    B.VS_BUDGET_RFX_VARIANCE,
+    -- 3. CY PQ ACTUALS
+    C.CY_PQ_ACTUALS_CFX,
+    C.CY_PQ_ACTUALS_RFX,
+    -- 4. FY OUTLOOK
+    D.FY_OUTLOOK_CFX,
+    D.FY_OUTLOOK_RFX,
+    -- 5. PY PQ VARIANCE
+    E.PY_PQ_CFX_VARIANCE,
+    E.PY_PQ_RFX_VARIANCE,
+    -- 6. YTD ACTUAL PY VARIANCE
+    F.YTD_ACTUAL_PY_CFX_VARIANCE,
+    F.YTD_ACTUAL_PY_RFX_VARIANCE,
+    -- 7. FY OUTLOOK PY VARIANCE
+    G.FY_OUTLOOK_PY_CFX_VARIANCE,
+    G.FY_OUTLOOK_PY_RFX_VARIANCE
+FROM YTD_ACTUALS    A
+CROSS JOIN VS_BUDGET       B
+CROSS JOIN CY_PQ_ACTUALS   C
+CROSS JOIN FY_OUTLOOK      D
+CROSS JOIN PY_PQ_ACTUALS   E
+CROSS JOIN YTD_ACTUAL_PY   F
+CROSS JOIN FY_OUTLOOK_PY   G;
+'
+WHERE ID = 3;
+
+
+-- ============================================================
+-- 2. RoTE (ID = 5)
+-- ============================================================
+UPDATE "T1GDTL_PHY"."NRFP_FINANCIALS_REPORTINGMASTER"
+SET QUERY = '
+-- ============================================================
+-- ROTE % - ALL METRICS IN ONE QUERY
+-- ============================================================
+
+WITH
+
+-- 1. YTD ACTUALS
+YTD_ACTUALS AS (
+    SELECT
+        SUM(A.CFX_N) AS YTD_ACTUALS_CFX,
+        SUM(A.RFX_N) AS YTD_ACTUALS_RFX
+    FROM "T1NFRP_PHY"."CV_UP_NFRP_ALLRATIOS" A
+    JOIN "T1NFRP_PHY"."TBL_NFRP_DATE_CONFIG" D
+        ON A.E_PERIOD_DATE = D.E_PERIOD_DATE
+    WHERE A.DATA_TYPE = ''Actuals''
+    AND A.T_VERSION = ''YTD''
+    AND A.M_ACCOUNT_5 = ''RoTE %''
+    AND A.T_REPORTING = ''CIB''
+    AND D.ADD16 = 0
+    AND D.FILTER_DATE = ''CURRENT_MONTH''
+    AND D.FILTER_TYPE = ''PYR+CYR''
+),
+
+-- 2. VS BUDGET VARIANCE: (Actuals - Budget) / |Budget| * 100
+VS_BUDGET AS (
+    SELECT
+        CASE
+            WHEN SUM(CASE WHEN A.DATA_TYPE = ''Budget'' AND D.ADD16 = 0 THEN A.CFX_N ELSE 0 END) = 0 THEN NULL
+            ELSE (
+                SUM(CASE WHEN A.DATA_TYPE = ''Actuals'' AND D.ADD16 = 0 THEN A.CFX_N ELSE 0 END) -
+                SUM(CASE WHEN A.DATA_TYPE = ''Budget''  AND D.ADD16 = 0 THEN A.CFX_N ELSE 0 END)
+            ) / ABS(SUM(CASE WHEN A.DATA_TYPE = ''Budget'' AND D.ADD16 = 0 THEN A.CFX_N ELSE 0 END)) * 100
+        END AS VS_BUDGET_CFX_VARIANCE,
+        CASE
+            WHEN SUM(CASE WHEN A.DATA_TYPE = ''Budget'' AND D.ADD16 = 0 THEN A.RFX_N ELSE 0 END) = 0 THEN NULL
+            ELSE (
+                SUM(CASE WHEN A.DATA_TYPE = ''Actuals'' AND D.ADD16 = 0 THEN A.RFX_N ELSE 0 END) -
+                SUM(CASE WHEN A.DATA_TYPE = ''Budget''  AND D.ADD16 = 0 THEN A.RFX_N ELSE 0 END)
+            ) / ABS(SUM(CASE WHEN A.DATA_TYPE = ''Budget'' AND D.ADD16 = 0 THEN A.RFX_N ELSE 0 END)) * 100
+        END AS VS_BUDGET_RFX_VARIANCE
+    FROM "T1NFRP_PHY"."CV_UP_NFRP_ALLRATIOS" A
+    JOIN "T1NFRP_PHY"."TBL_NFRP_DATE_CONFIG" D
+        ON A.E_PERIOD_DATE = D.E_PERIOD_DATE
+    WHERE A.DATA_TYPE IN (''Actuals'', ''Budget'')
+    AND A.T_VERSION = ''YTD''
+    AND A.M_ACCOUNT_5 = ''RoTE %''
+    AND A.T_REPORTING = ''CIB''
+    AND D.FILTER_DATE = ''CURRENT_MONTH''
+    AND D.FILTER_TYPE = ''PYR+CYR''
+),
+
+-- 3. PQTR ACTUALS
+PQTR_ACTUALS AS (
+    SELECT
+        SUM(A.CFX_N) AS PQTR_ACTUALS_CFX,
+        SUM(A.RFX_N) AS PQTR_ACTUALS_RFX
+    FROM "T1NFRP_PHY"."CV_UP_NFRP_ALLRATIOS" A
+    JOIN "T1NFRP_PHY"."TBL_NFRP_DATE_CONFIG" D
+        ON A.E_PERIOD_DATE = D.E_PERIOD_DATE
+    WHERE A.DATA_TYPE = ''Actuals''
+    AND A.T_VERSION = ''QTD''
+    AND A.M_ACCOUNT_5 = ''RoTE %''
+    AND A.T_REPORTING = ''CIB''
+    AND D.ADD17 = -1
+    AND D.FILTER_DATE = ''CURRENT_MONTH''
+    AND D.FILTER_TYPE = ''PYR+CYR''
+),
+
+-- 4. FY OUTLOOK
+FY_OUTLOOK AS (
+    SELECT
+        SUM(A.CFX_N) AS FY_OUTLOOK_CFX,
+        SUM(A.RFX_N) AS FY_OUTLOOK_RFX
+    FROM "T1NFRP_PHY"."CV_UP_NFRP_ALLRATIOS" A
+    JOIN "T1NFRP_PHY"."TBL_NFRP_DATE_CONFIG" D
+        ON A.E_PERIOD_DATE = D.E_PERIOD_DATE
+    WHERE A.DATA_TYPE = ''Outlook_PM''
+    AND A.T_VERSION = ''YTD''
+    AND A.M_ACCOUNT_5 = ''RoTE %''
+    AND A.T_REPORTING = ''CIB''
+    AND A.MONTH_ABR = ''FY''
+    AND D.ADD18 = -1
+    AND D.FILTER_DATE = ''CURRENT_MONTH''
+    AND D.FILTER_TYPE = ''PYR+CYR''
+),
+
+-- 5. FY ACTPY VARIANCE: (FY Outlook - FY Actuals PY) / |FY Actuals PY| * 100
+FY_ACTPY AS (
+    SELECT
+        CASE
+            WHEN SUM(CASE WHEN A.DATA_TYPE = ''Actuals'' AND A.T_VERSION = ''YTD'' AND A.MONTH_ABR = ''FY'' AND D.ADD19 = ''PY'' THEN A.CFX_N ELSE 0 END) = 0 THEN NULL
+            ELSE (
+                SUM(CASE WHEN A.DATA_TYPE = ''Outlook_PM'' AND A.T_VERSION = ''YTD'' AND A.MONTH_ABR = ''FY'' AND D.ADD18 = -1 THEN A.CFX_N ELSE 0 END) -
+                SUM(CASE WHEN A.DATA_TYPE = ''Actuals''    AND A.T_VERSION = ''YTD'' AND A.MONTH_ABR = ''FY'' AND D.ADD19 = ''PY'' THEN A.CFX_N ELSE 0 END)
+            ) / ABS(SUM(CASE WHEN A.DATA_TYPE = ''Actuals'' AND A.T_VERSION = ''YTD'' AND A.MONTH_ABR = ''FY'' AND D.ADD19 = ''PY'' THEN A.CFX_N ELSE 0 END)) * 100
+        END AS FY_ACTPY_CFX_VARIANCE,
+        CASE
+            WHEN SUM(CASE WHEN A.DATA_TYPE = ''Actuals'' AND A.T_VERSION = ''YTD'' AND A.MONTH_ABR = ''FY'' AND D.ADD19 = ''PY'' THEN A.RFX_N ELSE 0 END) = 0 THEN NULL
+            ELSE (
+                SUM(CASE WHEN A.DATA_TYPE = ''Outlook_PM'' AND A.T_VERSION = ''YTD'' AND A.MONTH_ABR = ''FY'' AND D.ADD18 = -1 THEN A.RFX_N ELSE 0 END) -
+                SUM(CASE WHEN A.DATA_TYPE = ''Actuals''    AND A.T_VERSION = ''YTD'' AND A.MONTH_ABR = ''FY'' AND D.ADD19 = ''PY'' THEN A.RFX_N ELSE 0 END)
+            ) / ABS(SUM(CASE WHEN A.DATA_TYPE = ''Actuals'' AND A.T_VERSION = ''YTD'' AND A.MONTH_ABR = ''FY'' AND D.ADD19 = ''PY'' THEN A.RFX_N ELSE 0 END)) * 100
+        END AS FY_ACTPY_RFX_VARIANCE
+    FROM "T1NFRP_PHY"."CV_UP_NFRP_ALLRATIOS" A
+    JOIN "T1NFRP_PHY"."TBL_NFRP_DATE_CONFIG" D
+        ON A.E_PERIOD_DATE = D.E_PERIOD_DATE
+    WHERE A.DATA_TYPE IN (''Outlook_PM'', ''Actuals'')
+    AND A.T_VERSION = ''YTD''
+    AND A.M_ACCOUNT_5 = ''RoTE %''
+    AND A.T_REPORTING = ''CIB''
+    AND D.FILTER_DATE = ''CURRENT_MONTH''
+    AND D.FILTER_TYPE = ''PYR+CYR''
+),
+
+-- 6. PY PQTR VARIANCE: (CY PQTR - PY PQTR) / |PY PQTR| * 100
+PY_PQTR AS (
+    SELECT
+        CASE
+            WHEN SUM(CASE WHEN D.ADD17 = -4 THEN A.CFX_N ELSE 0 END) = 0 THEN NULL
+            ELSE (
+                SUM(CASE WHEN D.ADD17 = -1 THEN A.CFX_N ELSE 0 END) -
+                SUM(CASE WHEN D.ADD17 = -4 THEN A.CFX_N ELSE 0 END)
+            ) / ABS(SUM(CASE WHEN D.ADD17 = -4 THEN A.CFX_N ELSE 0 END)) * 100
+        END AS PY_PQTR_CFX_VARIANCE,
+        CASE
+            WHEN SUM(CASE WHEN D.ADD17 = -4 THEN A.RFX_N ELSE 0 END) = 0 THEN NULL
+            ELSE (
+                SUM(CASE WHEN D.ADD17 = -1 THEN A.RFX_N ELSE 0 END) -
+                SUM(CASE WHEN D.ADD17 = -4 THEN A.RFX_N ELSE 0 END)
+            ) / ABS(SUM(CASE WHEN D.ADD17 = -4 THEN A.RFX_N ELSE 0 END)) * 100
+        END AS PY_PQTR_RFX_VARIANCE
+    FROM "T1NFRP_PHY"."CV_UP_NFRP_ALLRATIOS" A
+    JOIN "T1NFRP_PHY"."TBL_NFRP_DATE_CONFIG" D
+        ON A.E_PERIOD_DATE = D.E_PERIOD_DATE
+    WHERE A.DATA_TYPE = ''Actuals''
+    AND A.T_VERSION = ''QTD''
+    AND A.M_ACCOUNT_5 = ''RoTE %''
+    AND A.T_REPORTING = ''CIB''
+    AND D.ADD17 IN (-1, -4)        -- corrected from -5 to -4
+    AND D.FILTER_DATE = ''CURRENT_MONTH''
+    AND D.FILTER_TYPE = ''PYR+CYR''
+),
+
+-- 7. PYYTD VARIANCE: (YTD CY - YTD PY) / |YTD PY| * 100
+PYYTD_ACTUALS AS (
+    SELECT
+        CASE
+            WHEN SUM(CASE WHEN A.DATA_TYPE = ''Actuals'' AND A.T_VERSION = ''YTD'' AND D.ADD9 = ''2025_M01'' THEN A.CFX_N ELSE 0 END) = 0 THEN NULL
+            ELSE (
+                SUM(CASE WHEN A.DATA_TYPE = ''Actuals'' AND A.T_VERSION = ''YTD'' AND D.ADD16 = 0            THEN A.CFX_N ELSE 0 END) -
+                SUM(CASE WHEN A.DATA_TYPE = ''Actuals'' AND A.T_VERSION = ''YTD'' AND D.ADD9 = ''2025_M01''    THEN A.CFX_N ELSE 0 END)
+            ) / ABS(SUM(CASE WHEN A.DATA_TYPE = ''Actuals'' AND A.T_VERSION = ''YTD'' AND D.ADD9 = ''2025_M01'' THEN A.CFX_N ELSE 0 END)) * 100
+        END AS PYYTD_CFX_VARIANCE,
+        CASE
+            WHEN SUM(CASE WHEN A.DATA_TYPE = ''Actuals'' AND A.T_VERSION = ''YTD'' AND D.ADD9 = ''2025_M01'' THEN A.RFX_N ELSE 0 END) = 0 THEN NULL
+            ELSE (
+                SUM(CASE WHEN A.DATA_TYPE = ''Actuals'' AND A.T_VERSION = ''YTD'' AND D.ADD16 = 0            THEN A.RFX_N ELSE 0 END) -
+                SUM(CASE WHEN A.DATA_TYPE = ''Actuals'' AND A.T_VERSION = ''YTD'' AND D.ADD9 = ''2025_M01''    THEN A.RFX_N ELSE 0 END)
+            ) / ABS(SUM(CASE WHEN A.DATA_TYPE = ''Actuals'' AND A.T_VERSION = ''YTD'' AND D.ADD9 = ''2025_M01'' THEN A.RFX_N ELSE 0 END)) * 100
+        END AS PYYTD_RFX_VARIANCE
+    FROM "T1NFRP_PHY"."CV_UP_NFRP_ALLRATIOS" A
+    JOIN "T1NFRP_PHY"."TBL_NFRP_DATE_CONFIG" D
+        ON A.E_PERIOD_DATE = D.E_PERIOD_DATE
+    WHERE A.DATA_TYPE = ''Actuals''
+    AND A.T_VERSION = ''YTD''
+    AND A.M_ACCOUNT_5 = ''RoTE %''
+    AND A.T_REPORTING = ''CIB''
+    AND D.FILTER_DATE = ''CURRENT_MONTH''
+    AND D.FILTER_TYPE = ''PYR+CYR''
+)
+
+-- FINAL OUTPUT - ALL METRICS IN ONE ROW
+SELECT
+    -- 1. YTD ACTUALS
+    A.YTD_ACTUALS_CFX,
+    A.YTD_ACTUALS_RFX,
+    -- 2. VS BUDGET VARIANCE
+    B.VS_BUDGET_CFX_VARIANCE,
+    B.VS_BUDGET_RFX_VARIANCE,
+    -- 3. PQTR ACTUALS
+    C.PQTR_ACTUALS_CFX,
+    C.PQTR_ACTUALS_RFX,
+    -- 4. FY OUTLOOK
+    D.FY_OUTLOOK_CFX,
+    D.FY_OUTLOOK_RFX,
+    -- 5. FY ACTPY VARIANCE
+    E.FY_ACTPY_CFX_VARIANCE,
+    E.FY_ACTPY_RFX_VARIANCE,
+    -- 6. PY PQTR VARIANCE
+    F.PY_PQTR_CFX_VARIANCE,
+    F.PY_PQTR_RFX_VARIANCE,
+    -- 7. PYYTD VARIANCE
+    G.PYYTD_CFX_VARIANCE,
+    G.PYYTD_RFX_VARIANCE
+FROM YTD_ACTUALS   A
+CROSS JOIN VS_BUDGET    B
+CROSS JOIN PQTR_ACTUALS C
+CROSS JOIN FY_OUTLOOK   D
+CROSS JOIN FY_ACTPY     E
+CROSS JOIN PY_PQTR      F
+CROSS JOIN PYYTD_ACTUALS G;
+'
+WHERE ID = 5;
+
+
+-- ============================================================
+-- 3. Funded Assets (ID = 4)
+-- ============================================================
+UPDATE "T1GDTL_PHY"."NRFP_FINANCIALS_REPORTINGMASTER"
+SET QUERY = '
+-- ============================================================
+-- FUNDED ASSETS - ALL METRICS IN ONE QUERY
+-- ============================================================
+
+WITH
+
+-- 1. YTD ACTUALS
+YTD_ACTUALS AS (
+    SELECT
+        SUM(CFX) AS YTD_ACTUALS_CFX,
+        SUM(RFX) AS YTD_ACTUALS_RFX
+    FROM "T1NFRP_PHY"."CV_UP_NFRP_ALLDATA" A
+    JOIN "T1NFRP_PHY"."TBL_NFRP_DATE_CONFIG" D
+        ON A.E_PERIOD_DATE = D.E_PERIOD_DATE
+    WHERE A.DATA_TYPE = ''Actuals''
+    AND A.T_VERSION = ''YTD''
+    AND A.M_ACCOUNT_1 = ''Funded Assets''
+    AND A.T_REPORTING = ''CIB''
+    AND D.ADD16 = 0
+    AND D.FILTER_DATE = ''CURRENT_MONTH''
+    AND D.FILTER_TYPE = ''PYR+CYR''
+),
+
+-- 2. VS BUDGET VARIANCE: (Actuals - Budget) / |Budget| * 100
+VS_BUDGET AS (
+    SELECT
+        CASE
+            WHEN SUM(CASE WHEN A.DATA_TYPE = ''Budget'' AND D.ADD16 = 0 THEN CFX ELSE 0 END) = 0 THEN NULL
+            ELSE (
+                SUM(CASE WHEN A.DATA_TYPE = ''Actuals'' AND D.ADD16 = 0 THEN CFX ELSE 0 END) -
+                SUM(CASE WHEN A.DATA_TYPE = ''Budget''  AND D.ADD16 = 0 THEN CFX ELSE 0 END)
+            ) / ABS(SUM(CASE WHEN A.DATA_TYPE = ''Budget'' AND D.ADD16 = 0 THEN CFX ELSE 0 END)) * 100
+        END AS VS_BUDGET_CFX_VARIANCE,
+        CASE
+            WHEN SUM(CASE WHEN A.DATA_TYPE = ''Budget'' AND D.ADD16 = 0 THEN RFX ELSE 0 END) = 0 THEN NULL
+            ELSE (
+                SUM(CASE WHEN A.DATA_TYPE = ''Actuals'' AND D.ADD16 = 0 THEN RFX ELSE 0 END) -
+                SUM(CASE WHEN A.DATA_TYPE = ''Budget''  AND D.ADD16 = 0 THEN RFX ELSE 0 END)
+            ) / ABS(SUM(CASE WHEN A.DATA_TYPE = ''Budget'' AND D.ADD16 = 0 THEN RFX ELSE 0 END)) * 100
+        END AS VS_BUDGET_RFX_VARIANCE
+    FROM "T1NFRP_PHY"."CV_UP_NFRP_ALLDATA" A
+    JOIN "T1NFRP_PHY"."TBL_NFRP_DATE_CONFIG" D
+        ON A.E_PERIOD_DATE = D.E_PERIOD_DATE
+    WHERE A.DATA_TYPE IN (''Actuals'', ''Budget'')
+    AND A.T_VERSION = ''YTD''
+    AND A.M_ACCOUNT_1 = ''Funded Assets''
+    AND A.T_REPORTING = ''CIB''
+    AND D.FILTER_DATE = ''CURRENT_MONTH''
+    AND D.FILTER_TYPE = ''PYR+CYR''
+),
+
+-- 3. CY PQ ACTUALS
+CY_PQ_ACTUALS AS (
+    SELECT
+        SUM(CFX) AS CY_PQ_ACTUALS_CFX,
+        SUM(RFX) AS CY_PQ_ACTUALS_RFX
+    FROM "T1NFRP_PHY"."CV_UP_NFRP_ALLDATA" A
+    JOIN "T1NFRP_PHY"."TBL_NFRP_DATE_CONFIG" D
+        ON A.E_PERIOD_DATE = D.E_PERIOD_DATE
+    WHERE A.DATA_TYPE = ''Actuals''
+    AND A.T_VERSION = ''QTD''
+    AND A.M_ACCOUNT_1 = ''Funded Assets''
+    AND A.T_REPORTING = ''CIB''
+    AND D.ADD17 = -1
+    AND D.FILTER_DATE = ''CURRENT_MONTH''
+    AND D.FILTER_TYPE = ''PYR+CYR''
+),
+
+-- 4. FY OUTLOOK
+FY_OUTLOOK AS (
+    SELECT
+        SUM(CFX) AS FY_OUTLOOK_CFX,
+        SUM(RFX) AS FY_OUTLOOK_RFX
+    FROM "T1NFRP_PHY"."CV_UP_NFRP_ALLDATA" A
+    JOIN "T1NFRP_PHY"."TBL_NFRP_DATE_CONFIG" D
+        ON A.E_PERIOD_DATE = D.E_PERIOD_DATE
+    WHERE A.DATA_TYPE = ''Outlook_PM''
+    AND A.T_VERSION = ''YTD''
+    AND A.M_ACCOUNT_1 = ''Funded Assets''
+    AND A.T_REPORTING = ''CIB''
+    AND A.MONTH_ABR = ''Nov''        -- corrected from ''FY''
+    AND D.ADD18 = -1               -- corrected from ''-1'' (string)
+    AND D.FILTER_DATE = ''CURRENT_MONTH''
+    AND D.FILTER_TYPE = ''PYR+CYR''
+),
+
+-- 5. PY PQ VARIANCE: (CY PQ - PY PQ) / |PY PQ| * 100
+PY_PQ_ACTUALS AS (
+    SELECT
+        CASE
+            WHEN SUM(CASE WHEN D.ADD17 = -4 THEN CFX ELSE 0 END) = 0 THEN NULL
+            ELSE (
+                SUM(CASE WHEN D.ADD17 = -1 THEN CFX ELSE 0 END) -
+                SUM(CASE WHEN D.ADD17 = -4 THEN CFX ELSE 0 END)
+            ) / ABS(SUM(CASE WHEN D.ADD17 = -4 THEN CFX ELSE 0 END)) * 100
+        END AS PY_PQ_CFX_VARIANCE,
+        CASE
+            WHEN SUM(CASE WHEN D.ADD17 = -4 THEN RFX ELSE 0 END) = 0 THEN NULL
+            ELSE (
+                SUM(CASE WHEN D.ADD17 = -1 THEN RFX ELSE 0 END) -
+                SUM(CASE WHEN D.ADD17 = -4 THEN RFX ELSE 0 END)
+            ) / ABS(SUM(CASE WHEN D.ADD17 = -4 THEN RFX ELSE 0 END)) * 100
+        END AS PY_PQ_RFX_VARIANCE
+    FROM "T1NFRP_PHY"."CV_UP_NFRP_ALLDATA" A
+    JOIN "T1NFRP_PHY"."TBL_NFRP_DATE_CONFIG" D
+        ON A.E_PERIOD_DATE = D.E_PERIOD_DATE
+    WHERE A.DATA_TYPE = ''Actuals''
+    AND A.T_VERSION = ''QTD''
+    AND A.M_ACCOUNT_1 = ''Funded Assets''
+    AND A.T_REPORTING = ''CIB''
+    AND D.ADD17 IN (-1, -4)        -- corrected from -5 to -4
+    AND D.FILTER_DATE = ''CURRENT_MONTH''
+    AND D.FILTER_TYPE = ''PYR+CYR''
+),
+
+-- 6. YTD ACTUAL PY VARIANCE: (YTD CY - YTD PY) / |YTD PY| * 100
+YTD_ACTUAL_PY AS (
+    SELECT
+        CASE
+            WHEN SUM(CASE WHEN A.T_VERSION = ''MTD'' AND D.ADD6 = ''PY_YTD'' THEN CFX ELSE 0 END) = 0 THEN NULL
+            ELSE (
+                SUM(CASE WHEN A.T_VERSION = ''YTD'' AND D.ADD16 = 0        THEN CFX ELSE 0 END) -
+                SUM(CASE WHEN A.T_VERSION = ''MTD'' AND D.ADD6  = ''PY_YTD'' THEN CFX ELSE 0 END)
+            ) / ABS(SUM(CASE WHEN A.T_VERSION = ''MTD'' AND D.ADD6 = ''PY_YTD'' THEN CFX ELSE 0 END)) * 100
+        END AS YTD_ACTUAL_PY_CFX_VARIANCE,
+        CASE
+            WHEN SUM(CASE WHEN A.T_VERSION = ''MTD'' AND D.ADD6 = ''PY_YTD'' THEN RFX ELSE 0 END) = 0 THEN NULL
+            ELSE (
+                SUM(CASE WHEN A.T_VERSION = ''YTD'' AND D.ADD16 = 0        THEN RFX ELSE 0 END) -
+                SUM(CASE WHEN A.T_VERSION = ''MTD'' AND D.ADD6  = ''PY_YTD'' THEN RFX ELSE 0 END)
+            ) / ABS(SUM(CASE WHEN A.T_VERSION = ''MTD'' AND D.ADD6 = ''PY_YTD'' THEN RFX ELSE 0 END)) * 100
+        END AS YTD_ACTUAL_PY_RFX_VARIANCE
+    FROM "T1NFRP_PHY"."CV_UP_NFRP_ALLDATA" A
+    JOIN "T1NFRP_PHY"."TBL_NFRP_DATE_CONFIG" D
+        ON A.E_PERIOD_DATE = D.E_PERIOD_DATE
+    WHERE A.DATA_TYPE = ''Actuals''
+    AND A.M_ACCOUNT_1 = ''Funded Assets''
+    AND A.T_REPORTING = ''CIB''
+    AND D.FILTER_DATE = ''CURRENT_MONTH''
+    AND D.FILTER_TYPE = ''PYR+CYR''
+),
+
+-- 7. FY OUTLOOK VS YTD ACTUAL PY VARIANCE: (FY Outlook - YTD PY) / |YTD PY| * 100
+FY_OUTLOOK_PY AS (
+    SELECT
+        CASE
+            WHEN SUM(CASE WHEN A.DATA_TYPE = ''Actuals'' AND A.T_VERSION = ''MTD'' AND D.ADD6 = ''PY_YTD'' THEN CFX ELSE 0 END) = 0 THEN NULL
+            ELSE (
+                SUM(CASE WHEN A.DATA_TYPE = ''Outlook_PM'' AND A.T_VERSION = ''YTD'' AND A.MONTH_ABR = ''Nov'' AND D.ADD18 = -1 THEN CFX ELSE 0 END) -
+                SUM(CASE WHEN A.DATA_TYPE = ''Actuals''    AND A.T_VERSION = ''MTD'' AND D.ADD6 = ''PY_YTD''                    THEN CFX ELSE 0 END)
+            ) / ABS(SUM(CASE WHEN A.DATA_TYPE = ''Actuals'' AND A.T_VERSION = ''MTD'' AND D.ADD6 = ''PY_YTD'' THEN CFX ELSE 0 END)) * 100
+        END AS FY_OUTLOOK_PY_CFX_VARIANCE,
+        CASE
+            WHEN SUM(CASE WHEN A.DATA_TYPE = ''Actuals'' AND A.T_VERSION = ''MTD'' AND D.ADD6 = ''PY_YTD'' THEN RFX ELSE 0 END) = 0 THEN NULL
+            ELSE (
+                SUM(CASE WHEN A.DATA_TYPE = ''Outlook_PM'' AND A.T_VERSION = ''YTD'' AND A.MONTH_ABR = ''Nov'' AND D.ADD18 = -1 THEN RFX ELSE 0 END) -
+                SUM(CASE WHEN A.DATA_TYPE = ''Actuals''    AND A.T_VERSION = ''MTD'' AND D.ADD6 = ''PY_YTD''                    THEN RFX ELSE 0 END)
+            ) / ABS(SUM(CASE WHEN A.DATA_TYPE = ''Actuals'' AND A.T_VERSION = ''MTD'' AND D.ADD6 = ''PY_YTD'' THEN RFX ELSE 0 END)) * 100
+        END AS FY_OUTLOOK_PY_RFX_VARIANCE
+    FROM "T1NFRP_PHY"."CV_UP_NFRP_ALLDATA" A
+    JOIN "T1NFRP_PHY"."TBL_NFRP_DATE_CONFIG" D
+        ON A.E_PERIOD_DATE = D.E_PERIOD_DATE
+    WHERE A.DATA_TYPE IN (''Outlook_PM'', ''Actuals'')
+    AND A.M_ACCOUNT_1 = ''Funded Assets''
+    AND A.T_REPORTING = ''CIB''
+    AND D.FILTER_DATE = ''CURRENT_MONTH''
+    AND D.FILTER_TYPE = ''PYR+CYR''
+)
+
+-- FINAL OUTPUT - ALL METRICS IN ONE ROW
+SELECT
+    -- 1. YTD ACTUALS
+    A.YTD_ACTUALS_CFX,
+    A.YTD_ACTUALS_RFX,
+    -- 2. VS BUDGET VARIANCE
+    B.VS_BUDGET_CFX_VARIANCE,
+    B.VS_BUDGET_RFX_VARIANCE,
+    -- 3. CY PQ ACTUALS
+    C.CY_PQ_ACTUALS_CFX,
+    C.CY_PQ_ACTUALS_RFX,
+    -- 4. FY OUTLOOK
+    D.FY_OUTLOOK_CFX,
+    D.FY_OUTLOOK_RFX,
+    -- 5. PY PQ VARIANCE
+    E.PY_PQ_CFX_VARIANCE,
+    E.PY_PQ_RFX_VARIANCE,
+    -- 6. YTD ACTUAL PY VARIANCE
+    F.YTD_ACTUAL_PY_CFX_VARIANCE,
+    F.YTD_ACTUAL_PY_RFX_VARIANCE,
+    -- 7. FY OUTLOOK PY VARIANCE
+    G.FY_OUTLOOK_PY_CFX_VARIANCE,
+    G.FY_OUTLOOK_PY_RFX_VARIANCE
+FROM YTD_ACTUALS    A
+CROSS JOIN VS_BUDGET       B
+CROSS JOIN CY_PQ_ACTUALS   C
+CROSS JOIN FY_OUTLOOK      D
+CROSS JOIN PY_PQ_ACTUALS   E
+CROSS JOIN YTD_ACTUAL_PY   F
+CROSS JOIN FY_OUTLOOK_PY   G;
+'
+WHERE ID = 4;
+
+
+-- ============================================================
+-- 4. Impairments (ID = 2)
+-- ============================================================
+UPDATE "T1GDTL_PHY"."NRFP_FINANCIALS_REPORTINGMASTER"
+SET QUERY = '
+-- ============================================================
+-- IMPAIRMENTS - ALL METRICS IN ONE QUERY
+-- ============================================================
+
+WITH 
+
+-- 1. YTD ACTUALS
+YTD_ACTUALS AS (
+    SELECT 
+        SUM(CFX) AS YTD_ACTUALS_CFX,
+        SUM(RFX) AS YTD_ACTUALS_RFX
+    FROM "T1NFRP_PHY"."CV_UP_NFRP_ALLDATA" A
+    JOIN "T1NFRP_PHY"."TBL_NFRP_DATE_CONFIG" D ON D.ADD16 = 0
+    WHERE A.DATA_TYPE = ''Actuals''
+    AND A.T_VERSION = ''YTD''
+    AND A.M_ACCOUNT_0 = ''Impairments''
+    AND A.T_REPORTING = ''CIB''
+    AND D.FILTER_DATE = ''CURRENT_MONTH''
+    AND D.FILTER_TYPE = ''PYR+CYR''
+),
+
+-- 2. VS BUDGET
+VS_BUDGET AS (
+    SELECT
+        CASE 
+            WHEN SUM(CASE WHEN A.DATA_TYPE = ''Budget'' THEN CFX ELSE 0 END) = 0 THEN NULL
+            ELSE (
+                SUM(CASE WHEN A.DATA_TYPE = ''Actuals'' THEN CFX ELSE 0 END) -
+                SUM(CASE WHEN A.DATA_TYPE = ''Budget''  THEN CFX ELSE 0 END)
+            ) / ABS(SUM(CASE WHEN A.DATA_TYPE = ''Budget'' THEN CFX ELSE 0 END)) * 100
+        END AS VS_BUDGET_CFX_PCT,
+        CASE 
+            WHEN SUM(CASE WHEN A.DATA_TYPE = ''Budget'' THEN RFX ELSE 0 END) = 0 THEN NULL
+            ELSE (
+                SUM(CASE WHEN A.DATA_TYPE = ''Actuals'' THEN RFX ELSE 0 END) -
+                SUM(CASE WHEN A.DATA_TYPE = ''Budget''  THEN RFX ELSE 0 END)
+            ) / ABS(SUM(CASE WHEN A.DATA_TYPE = ''Budget'' THEN RFX ELSE 0 END)) * 100
+        END AS VS_BUDGET_RFX_PCT
+    FROM "T1NFRP_PHY"."CV_UP_NFRP_ALLDATA" A
+    JOIN "T1NFRP_PHY"."TBL_NFRP_DATE_CONFIG" D ON D.ADD16 = 0
+    WHERE A.DATA_TYPE IN (''Actuals'', ''Budget'')
+    AND A.T_VERSION = ''YTD''
+    AND A.M_ACCOUNT_0 = ''Impairments''
+    AND A.T_REPORTING = ''CIB''
+    AND D.FILTER_DATE = ''CURRENT_MONTH''
+    AND D.FILTER_TYPE = ''PYR+CYR''
+),
+
+-- 3. CY PQ ACTUALS
+CY_PQ_ACTUALS AS (
+    SELECT 
+        SUM(CFX) AS CY_PQ_ACTUALS_CFX,
+        SUM(RFX) AS CY_PQ_ACTUALS_RFX
+    FROM "T1NFRP_PHY"."CV_UP_NFRP_ALLDATA" A
+    JOIN "T1NFRP_PHY"."TBL_NFRP_DATE_CONFIG" D ON D.ADD17 = -1
+    WHERE A.DATA_TYPE = ''Actuals''
+    AND A.T_VERSION = ''QTD''
+    AND A.M_ACCOUNT_0 = ''Impairments''
+    AND A.T_REPORTING = ''CIB''
+    AND D.FILTER_DATE = ''CURRENT_MONTH''
+    AND D.FILTER_TYPE = ''PYR+CYR''
+),
+
+-- 4. FY OUTLOOK
+FY_OUTLOOK AS (
+    SELECT 
+        SUM(CFX) AS FY_OUTLOOK_CFX,
+        SUM(RFX) AS FY_OUTLOOK_RFX
+    FROM "T1NFRP_PHY"."CV_UP_NFRP_ALLDATA" A
+    JOIN "T1NFRP_PHY"."TBL_NFRP_DATE_CONFIG" D ON D.ADD18 = -1
+    WHERE A.DATA_TYPE = ''Outlook_PM''
+    AND A.T_VERSION   = ''YTD''
+    AND A.M_ACCOUNT_0 = ''Impairments''
+    AND A.T_REPORTING = ''CIB''
+    AND A.MONTH_ABR   = ''Nov''
+    AND D.FILTER_DATE = ''CURRENT_MONTH''
+    AND D.FILTER_TYPE = ''PYR+CYR''
+),
+
+-- 5. PY PQ VARIANCE
+PY_PQ_ACTUALS AS (
+    SELECT 
+        CASE 
+            WHEN SUM(CASE WHEN D.ADD17 = -4 THEN CFX ELSE 0 END) = 0 THEN NULL
+            ELSE (
+                SUM(CASE WHEN D.ADD17 = -1 THEN CFX ELSE 0 END) -
+                SUM(CASE WHEN D.ADD17 = -4 THEN CFX ELSE 0 END)
+            ) / ABS(SUM(CASE WHEN D.ADD17 = -4 THEN CFX ELSE 0 END)) * 100
+        END AS PY_PQ_CFX_VARIANCE,
+        CASE 
+            WHEN SUM(CASE WHEN D.ADD17 = -4 THEN RFX ELSE 0 END) = 0 THEN NULL
+            ELSE (
+                SUM(CASE WHEN D.ADD17 = -1 THEN RFX ELSE 0 END) -
+                SUM(CASE WHEN D.ADD17 = -4 THEN RFX ELSE 0 END)
+            ) / ABS(SUM(CASE WHEN D.ADD17 = -4 THEN RFX ELSE 0 END)) * 100
+        END AS PY_PQ_RFX_VARIANCE
+    FROM "T1NFRP_PHY"."CV_UP_NFRP_ALLDATA" A
+    JOIN "T1NFRP_PHY"."TBL_NFRP_DATE_CONFIG" D ON D.ADD17 IN (-1, -4)
+    WHERE A.DATA_TYPE = ''Actuals''
+    AND A.T_VERSION = ''QTD''
+    AND A.M_ACCOUNT_0 = ''Impairments''
+    AND A.T_REPORTING = ''CIB''
+    AND D.FILTER_DATE = ''CURRENT_MONTH''
+    AND D.FILTER_TYPE = ''PYR+CYR''
+),
+
+-- 6. YTD ACTUAL PY VARIANCE
+YTD_ACTUAL_PY AS (
+    SELECT 
+        CASE 
+            WHEN SUM(CASE WHEN A.T_VERSION = ''MTD'' AND D.ADD6 = ''PY_YTD'' THEN CFX ELSE 0 END) = 0 THEN NULL
+            ELSE (
+                SUM(CASE WHEN A.T_VERSION = ''YTD'' AND D.ADD16 = 0         THEN CFX ELSE 0 END) -
+                SUM(CASE WHEN A.T_VERSION = ''MTD'' AND D.ADD6  = ''PY_YTD''  THEN CFX ELSE 0 END)
+            ) / ABS(SUM(CASE WHEN A.T_VERSION = ''MTD'' AND D.ADD6 = ''PY_YTD'' THEN CFX ELSE 0 END)) * 100
+        END AS YTD_ACTUAL_PY_CFX_VARIANCE,
+        CASE 
+            WHEN SUM(CASE WHEN A.T_VERSION = ''MTD'' AND D.ADD6 = ''PY_YTD'' THEN RFX ELSE 0 END) = 0 THEN NULL
+            ELSE (
+                SUM(CASE WHEN A.T_VERSION = ''YTD'' AND D.ADD16 = 0         THEN RFX ELSE 0 END) -
+                SUM(CASE WHEN A.T_VERSION = ''MTD'' AND D.ADD6  = ''PY_YTD''  THEN RFX ELSE 0 END)
+            ) / ABS(SUM(CASE WHEN A.T_VERSION = ''MTD'' AND D.ADD6 = ''PY_YTD'' THEN RFX ELSE 0 END)) * 100
+        END AS YTD_ACTUAL_PY_RFX_VARIANCE
+    FROM "T1NFRP_PHY"."CV_UP_NFRP_ALLDATA" A
+    JOIN "T1NFRP_PHY"."TBL_NFRP_DATE_CONFIG" D ON A.E_PERIOD_DATE = D.E_PERIOD_DATE
+    WHERE A.DATA_TYPE = ''Actuals''
+    AND A.M_ACCOUNT_0 = ''Impairments''
+    AND A.T_REPORTING = ''CIB''
+    AND D.FILTER_DATE = ''CURRENT_MONTH''
+    AND D.FILTER_TYPE = ''PYR+CYR''
+),
+
+-- 7. FY OUTLOOK VS YTD ACTUAL PY VARIANCE
+FY_OUTLOOK_PY AS (
+    SELECT 
+        CASE 
+            WHEN SUM(CASE WHEN A.DATA_TYPE = ''Actuals'' AND A.T_VERSION = ''MTD'' AND D.ADD6 = ''PY_YTD'' THEN CFX ELSE 0 END) = 0 THEN NULL
+            ELSE (
+                SUM(CASE WHEN A.DATA_TYPE = ''Outlook_PM'' AND A.T_VERSION = ''YTD'' AND A.MONTH_ABR = ''Nov'' AND D.ADD18 = -1 THEN CFX ELSE 0 END) -
+                SUM(CASE WHEN A.DATA_TYPE = ''Actuals''    AND A.T_VERSION = ''MTD'' AND D.ADD6 = ''PY_YTD''                    THEN CFX ELSE 0 END)
+            ) / ABS(SUM(CASE WHEN A.DATA_TYPE = ''Actuals'' AND A.T_VERSION = ''MTD'' AND D.ADD6 = ''PY_YTD'' THEN CFX ELSE 0 END)) * 100
+        END AS FY_OUTLOOK_PY_CFX_VARIANCE,
+        CASE 
+            WHEN SUM(CASE WHEN A.DATA_TYPE = ''Actuals'' AND A.T_VERSION = ''MTD'' AND D.ADD6 = ''PY_YTD'' THEN RFX ELSE 0 END) = 0 THEN NULL
+            ELSE (
+                SUM(CASE WHEN A.DATA_TYPE = ''Outlook_PM'' AND A.T_VERSION = ''YTD'' AND A.MONTH_ABR = ''Nov'' AND D.ADD18 = -1 THEN RFX ELSE 0 END) -
+                SUM(CASE WHEN A.DATA_TYPE = ''Actuals''    AND A.T_VERSION = ''MTD'' AND D.ADD6 = ''PY_YTD''                    THEN RFX ELSE 0 END)
+            ) / ABS(SUM(CASE WHEN A.DATA_TYPE = ''Actuals'' AND A.T_VERSION = ''MTD'' AND D.ADD6 = ''PY_YTD'' THEN RFX ELSE 0 END)) * 100
+        END AS FY_OUTLOOK_PY_RFX_VARIANCE
+    FROM "T1NFRP_PHY"."CV_UP_NFRP_ALLDATA" A
+    JOIN "T1NFRP_PHY"."TBL_NFRP_DATE_CONFIG" D ON A.E_PERIOD_DATE = D.E_PERIOD_DATE
+    WHERE A.DATA_TYPE IN (''Outlook_PM'', ''Actuals'')
+    AND A.M_ACCOUNT_0 = ''Impairments''
+    AND A.T_REPORTING = ''CIB''
+    AND D.FILTER_DATE = ''CURRENT_MONTH''
+    AND D.FILTER_TYPE = ''PYR+CYR''
+)
+
+-- FINAL OUTPUT
+SELECT
+    A.YTD_ACTUALS_CFX,
+    A.YTD_ACTUALS_RFX,
+    B.VS_BUDGET_CFX_PCT,
+    B.VS_BUDGET_RFX_PCT,
+    C.CY_PQ_ACTUALS_CFX,
+    C.CY_PQ_ACTUALS_RFX,
+    D.FY_OUTLOOK_CFX,
+    D.FY_OUTLOOK_RFX,
+    -- 5. PY PQ VARIANCE
+    E.PY_PQ_CFX_VARIANCE,
+    E.PY_PQ_RFX_VARIANCE,
+    -- 6. YTD ACTUAL PY VARIANCE
+    F.YTD_ACTUAL_PY_CFX_VARIANCE,
+    F.YTD_ACTUAL_PY_RFX_VARIANCE,
+    -- 7. FY OUTLOOK PY VARIANCE
+    G.FY_OUTLOOK_PY_CFX_VARIANCE,
+    G.FY_OUTLOOK_PY_RFX_VARIANCE
+FROM YTD_ACTUALS  A
+CROSS JOIN VS_BUDGET     B
+CROSS JOIN CY_PQ_ACTUALS C
+CROSS JOIN FY_OUTLOOK    D
+CROSS JOIN PY_PQ_ACTUALS E
+CROSS JOIN YTD_ACTUAL_PY F
+CROSS JOIN FY_OUTLOOK_PY G;
+'
+WHERE ID = 2;
